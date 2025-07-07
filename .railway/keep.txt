@@ -1,0 +1,1 @@
+Esse diretório serve para manter arquivos persistentes em Railway se o plano permitir.
