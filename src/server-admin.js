@@ -56,6 +56,10 @@ class WhatsAppCheckerAPI {
     this.app.get('/admin/qr', this.middlewareAdminAuth.bind(this), this.getQRCode.bind(this));
     this.app.post('/admin/tokens', this.middlewareAdminAuth.bind(this), this.createToken.bind(this));
     this.app.get('/admin/tokens', this.middlewareAdminAuth.bind(this), this.listTokens.bind(this));
+    this.app.post('/admin/change-password', this.middlewareAdminAuth.bind(this), this.changePassword.bind(this));
+    this.app.post('/admin/users', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.addUser.bind(this));
+    this.app.get('/admin/users', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.listUsers.bind(this));
+    this.app.delete('/admin/users/:id', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.deleteUser.bind(this));
 
     // Admin page
     this.app.get('/admin', (req, res) => {
@@ -129,9 +133,48 @@ class WhatsAppCheckerAPI {
                 <h2>Tokens</h2>
                 <div id="tokensList"></div>
             </div>
+
+            <div class="card">
+                <h2>Alterar Senha</h2>
+                <form id="changePasswordForm">
+                    <div class="form-group">
+                        <label>Senha atual:</label>
+                        <input type="password" id="currentPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Nova senha:</label>
+                        <input type="password" id="newPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Alterar Senha</button>
+                </form>
+            </div>
+
+            <div class="card" id="usersCard" style="display:none;">
+                <h2>Usuários</h2>
+                <form id="addUserForm">
+                    <div class="form-group">
+                        <label>Usuário:</label>
+                        <input type="text" id="newUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Senha:</label>
+                        <input type="password" id="newUserPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Tipo:</label>
+                        <select id="newUserType">
+                            <option value="common">Comum</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Cadastrar Usuário</button>
+                </form>
+                <div id="usersList"></div>
+            </div>
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
         let authToken = localStorage.getItem('authToken');
         
@@ -164,6 +207,17 @@ class WhatsAppCheckerAPI {
             document.getElementById('loginCard').style.display = 'none';
             document.getElementById('adminPanel').style.display = 'block';
             loadData();
+            // Exibe aba de usuários apenas para admin
+            fetch('/admin/status', { headers: { 'Authorization': 'Bearer ' + authToken } })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.user_type === 'admin') {
+                        document.getElementById('usersCard').style.display = 'block';
+                        loadUsers();
+                    } else {
+                        document.getElementById('usersCard').style.display = 'none';
+                    }
+                });
         }
 
         async function loadData() {
@@ -194,10 +248,16 @@ class WhatsAppCheckerAPI {
                 headers: { 'Authorization': 'Bearer ' + authToken }
             });
             const data = await response.json();
-            
             if (data.qr_code) {
                 document.getElementById('qrCode').style.display = 'block';
-                document.getElementById('qrCode').innerHTML = '<pre>' + data.qr_code + '</pre>';
+                // Limpa o conteúdo anterior
+                document.getElementById('qrCode').innerHTML = '';
+                // Gera o QR code visual
+                new QRCode(document.getElementById('qrCode'), {
+                    text: data.qr_code,
+                    width: 256,
+                    height: 256
+                });
             } else {
                 document.getElementById('qrCode').style.display = 'none';
             }
@@ -224,6 +284,52 @@ class WhatsAppCheckerAPI {
             }
         });
 
+        document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const response = await fetch('/admin/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken
+                },
+                body: JSON.stringify({
+                    currentPassword: document.getElementById('currentPassword').value,
+                    newPassword: document.getElementById('newPassword').value
+                })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                alert('Senha alterada com sucesso!');
+                document.getElementById('changePasswordForm').reset();
+            } else {
+                alert('Erro: ' + result.error);
+            }
+        });
+
+        document.getElementById('addUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const response = await fetch('/admin/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + authToken
+                },
+                body: JSON.stringify({
+                    username: document.getElementById('newUsername').value,
+                    password: document.getElementById('newUserPassword').value,
+                    user_type: document.getElementById('newUserType').value
+                })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                alert('Usuário cadastrado!');
+                document.getElementById('addUserForm').reset();
+                loadUsers();
+            } else {
+                alert('Erro: ' + result.error);
+            }
+        });
+
         async function loadTokens() {
             const response = await fetch('/admin/tokens', {
                 headers: { 'Authorization': 'Bearer ' + authToken }
@@ -236,6 +342,33 @@ class WhatsAppCheckerAPI {
                 'Token: <code>' + token.token + '</code>' +
                 '</div>'
             ).join('');
+        }
+
+        async function loadUsers() {
+            const response = await fetch('/admin/users', {
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            const users = await response.json();
+            document.getElementById('usersList').innerHTML = users.map(u =>
+                "<div style="border:1px solid #ddd;padding:10px;margin:5px 0;">
+                    <strong>${u.username}</strong> (${u.user_type})
+                    <button onclick="deleteUser(${u.id})" class="btn btn-danger" style="float:right;">Excluir</button>
+                </div>"
+            ).join('');
+        }
+
+        async function deleteUser(id) {
+            if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
+            const response = await fetch('/admin/users/' + id, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            if (response.ok) {
+                loadUsers();
+            } else {
+                const result = await response.json();
+                alert('Erro: ' + result.error);
+            }
         }
 
         setInterval(checkQR, 10000);
@@ -296,7 +429,8 @@ class WhatsAppCheckerAPI {
   async getAdminStatus(req, res) {
     res.json({
       whatsapp_connected: this.whatsappConnected,
-      current_qr: this.currentQRCode
+      current_qr: this.currentQRCode,
+      user_type: req.user.role
     });
   }
 
@@ -330,6 +464,63 @@ class WhatsAppCheckerAPI {
     try {
       const tokens = await this.authService.listApiTokens();
       res.json(tokens);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async changePassword(req, res) {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const userId = req.user.id;
+      // Busca usuário
+      const users = await this.database.query('SELECT * FROM users WHERE id = ?', [userId]);
+      if (!users.length) return res.status(404).json({ error: 'Usuário não encontrado' });
+      const user = users[0];
+      // Verifica senha atual
+      const bcrypt = require('bcryptjs');
+      const isValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isValid) return res.status(401).json({ error: 'Senha atual incorreta' });
+      // Atualiza senha
+      const hashed = await bcrypt.hash(newPassword, 12);
+      await this.database.query('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
+      res.json({ message: 'Senha alterada com sucesso' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async onlyAdmin(req, res, next) {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acesso restrito a administradores' });
+    next();
+  }
+  async addUser(req, res) {
+    try {
+      const { username, password, user_type } = req.body;
+      if (!username || !password || !user_type) return res.status(400).json({ error: 'Dados obrigatórios' });
+      const role = user_type === 'admin' ? 'admin' : 'common';
+      const bcrypt = require('bcryptjs');
+      const hashed = await bcrypt.hash(password, 12);
+      await this.database.query('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', [username, hashed, role]);
+      res.json({ message: 'Usuário cadastrado' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+  async listUsers(req, res) {
+    try {
+      const users = await this.database.query('SELECT id, username, role as user_type FROM users');
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+  async deleteUser(req, res) {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ error: 'ID obrigatório' });
+      await this.database.query('DELETE FROM users WHERE id = ?', [id]);
+      res.json({ message: 'Usuário excluído' });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
