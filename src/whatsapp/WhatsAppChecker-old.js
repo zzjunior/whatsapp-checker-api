@@ -1,12 +1,14 @@
 const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
-const { EventEmitter } = require('events');
+const qrcode = require('qrcode-terminal');
 const path = require('path');
 
-class WhatsAppChecker extends EventEmitter {
+class WhatsAppChecker {
   constructor() {
-    super();
     this.socket = null;
     this.authDir = path.join(__dirname, '../../auth');
+    this.onQR = null;
+    this.onConnected = null;
+    this.onDisconnected = null;
   }
 
   async connect() {
@@ -22,25 +24,24 @@ class WhatsAppChecker extends EventEmitter {
       const { connection, lastDisconnect, qr } = update;
       
       if (qr) {
-        console.log('📱 QR Code gerado');
-        this.emit('qr', qr);
+        console.log('QR Code gerado');
+        // Para terminal (desenvolvimento)
+        qrcode.generate(qr, { small: true });
+        // Para interface web (produção)
+        if (this.onQR) this.onQR(qr);
       }
       
       if (connection === 'close') {
-        console.log('❌ Conexão fechada');
-        this.emit('disconnected', lastDisconnect?.error);
+        console.log('Conexão fechada:', lastDisconnect?.error);
+        if (this.onDisconnected) this.onDisconnected();
       } else if (connection === 'open') {
-        console.log('✅ WhatsApp conectado!');
-        this.emit('ready');
+        console.log('Conectado ao WhatsApp com sucesso!');
+        if (this.onConnected) this.onConnected();
       }
     });
   }
 
   async checkNumber(number) {
-    if (!this.socket) {
-      throw new Error('WhatsApp não conectado');
-    }
-    
     const jid = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
     const [result] = await this.socket.onWhatsApp(jid);
     return {

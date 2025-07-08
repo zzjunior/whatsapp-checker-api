@@ -5,6 +5,6 @@
     }
   },
   "deploy": {
-    "startCommand": "node src/server-simple.js"
+    "startCommand": "node src/start-admin.js"
   }
 }

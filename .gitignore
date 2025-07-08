@@ -1,3 +1,8 @@
 node_modules
 auth/
 auth.json
+.env
+.env.local
+.env.production
+*.log
+database.sqlite

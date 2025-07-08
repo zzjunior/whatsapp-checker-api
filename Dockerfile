@@ -13,4 +13,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["node", "src/server-simple.js"]
+CMD ["node", "src/start-admin.js"]
