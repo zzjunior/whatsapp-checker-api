@@ -350,10 +350,10 @@ class WhatsAppCheckerAPI {
             });
             const users = await response.json();
             document.getElementById('usersList').innerHTML = users.map(u =>
-                "<div style="border:1px solid #ddd;padding:10px;margin:5px 0;">
+                `<div style="border:1px solid #ddd;padding:10px;margin:5px 0;">
                     <strong>${u.username}</strong> (${u.user_type})
                     <button onclick="deleteUser(${u.id})" class="btn btn-danger" style="float:right;">Excluir</button>
-                </div>"
+                </div>`
             ).join('');
         }
 
