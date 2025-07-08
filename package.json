@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node src/start-admin.js",
     "start:admin": "node src/start-admin.js",
     "dev": "node src/server.js"
   },
