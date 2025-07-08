@@ -38,6 +38,7 @@ class WhatsAppCheckerAPI {
     this.app.use('/api/', apiLimiter);
 
     this.app.use(express.static(require('path').join(__dirname, '../public')));
+    this.app.use('/assets', express.static(require('path').join(__dirname, '../public/assets')));
   }
 
   setupRoutes() {
