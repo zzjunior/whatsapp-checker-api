@@ -349,12 +349,12 @@ class WhatsAppCheckerAPI {
                 headers: { 'Authorization': 'Bearer ' + authToken }
             });
             const users = await response.json();
-            document.getElementById('usersList').innerHTML = users.map(u =>
-                `<div style="border:1px solid #ddd;padding:10px;margin:5px 0;">
-                    <strong>${u.username}</strong> (${u.user_type})
-                    <button onclick="deleteUser(${u.id})" class="btn btn-danger" style="float:right;">Excluir</button>
-                </div>`
-            ).join('');
+            document.getElementById('usersList').innerHTML = users.map(function(u) {
+                return '<div style="border:1px solid #ddd;padding:10px;margin:5px 0;">' +
+                    '<strong>' + u.username + '</strong> (' + u.user_type + ')' +
+                    '<button onclick="deleteUser(' + u.id + ')" class="btn btn-danger" style="float:right;">Excluir</button>' +
+                '</div>';
+            }).join('');
         }
 
         async function deleteUser(id) {
