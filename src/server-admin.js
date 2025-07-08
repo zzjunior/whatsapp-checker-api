@@ -430,11 +430,17 @@ class WhatsAppCheckerAPI {
   }
 
   async getAdminStatus(req, res) {
-    res.json({
-      whatsapp_connected: this.whatsappConnected,
-      current_qr: this.currentQRCode,
-      user_type: req.user.role
-    });
+    try {
+      // Garante que user_type, whatsapp_connected e username sempre sejam retornados
+      res.json({
+        whatsapp_connected: this.whatsappConnected,
+        current_qr: this.currentQRCode,
+        user_type: req.user?.role || 'common', // fallback para common
+        username: req.user?.username || null
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   }
 
   async connectWhatsApp(req, res) {
