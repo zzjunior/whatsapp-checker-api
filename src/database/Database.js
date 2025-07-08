@@ -9,9 +9,9 @@ class Database {
     try {
       this.connection = await mysql.createConnection({
         host: process.env.DB_HOST || 'localhost',
-        user: process.env.DB_USER || 'root',
+        user: process.env.DB_USERNAME || 'root',
         password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'whatsapp_checker',
+        database: process.env.DB_DATABASE || 'whatsapp_checker',
         port: process.env.DB_PORT || 3306,
         ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
       });
