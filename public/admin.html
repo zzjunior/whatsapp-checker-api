@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Painel Admin - WhatsApp-Checker-API</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./assets/css/admin.css">
+</head>
+<body>
+  <header class="header">
+    <span id="userName"></span>
+    <button id="btnMeusDados" class="btn">Meus Dados</button>
+    <button id="btnUsuarios" class="btn" style="display:none;">Usuários</button>
+    <button id="btnLogout" class="btn btn-danger">Sair</button>
+  </header>
+  <main>
+    <section id="dashboardSection"></section>
+    <section id="usuariosSection" style="display:none;"></section>
+  </main>
+
+  <!-- Modal Alterar Senha -->
+  <div id="modalMeusDados" class="modal" style="display:none;">
+    <div class="modal-content">
+      <span class="close" id="closeModalMeusDados">&times;</span>
+      <h2>Meus Dados</h2>
+      <form id="formAlterarSenha">
+        <div class="form-group">
+          <label>Usuário:</label>
+          <input type="text" id="meuUsuario" disabled>
+        </div>
+        <div class="form-group">
+          <label>Nova senha:</label>
+          <input type="password" id="novaSenha" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Alterar Senha</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="./assets/js/admin.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</body>
+</html>

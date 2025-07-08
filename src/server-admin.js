@@ -36,6 +36,8 @@ class WhatsAppCheckerAPI {
     });
 
     this.app.use('/api/', apiLimiter);
+
+    this.app.use(express.static(require('path').join(__dirname, '../public')));
   }
 
   setupRoutes() {
@@ -63,7 +65,7 @@ class WhatsAppCheckerAPI {
 
     // Admin page
     this.app.get('/admin', (req, res) => {
-      res.send(this.getAdminHTML());
+      res.sendFile(require('path').join(__dirname, '../public/admin.html'));
     });
   }
 
