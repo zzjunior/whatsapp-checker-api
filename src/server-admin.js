@@ -225,6 +225,289 @@ class WhatsAppCheckerAPI {
     }
   }
 
+  getAdminHTML() {
+    return `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>WhatsApp Checker - Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .card { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .btn { padding: 10px 20px; margin: 5px; border: none; cursor: pointer; border-radius: 5px; }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-success { background: #28a745; color: white; }
+    .form-group { margin: 15px 0; }
+    .form-group label { display: block; margin-bottom: 5px; }
+    .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+    .status { padding: 15px; margin: 10px 0; border-radius: 5px; }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.error { background: #f8d7da; color: #721c24; }
+    .qr-code { background: #f8f9fa; padding: 20px; border-radius: 5px; font-family: monospace; }
+    h1 { color: #333; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 WhatsApp Checker - Admin</h1>
+    <div class="card" id="loginCard">
+      <h2>Login</h2>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Username:</label>
+          <input type="text" id="username" required>
+        </div>
+        <div class="form-group">
+          <label>Password:</label>
+          <input type="password" id="password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+      </form>
+    </div>
+    <div id="adminPanel" style="display: none;">
+      <div class="card">
+        <h2>WhatsApp Status</h2>
+        <div id="whatsappStatus"></div>
+        <button onclick="connectWhatsApp()" class="btn btn-success">Conectar</button>
+        <button onclick="checkQR()" class="btn btn-primary">Ver QR</button>
+        <div id="qrCode" class="qr-code" style="display: none;"></div>
+      </div>
+      <div class="card">
+        <h2>Criar Token</h2>
+        <form id="tokenForm">
+          <div class="form-group">
+            <label>Nome:</label>
+            <input type="text" id="tokenName" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Criar</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Tokens</h2>
+        <div id="tokensList"></div>
+      </div>
+      <div class="card">
+        <h2>Alterar Senha</h2>
+        <form id="changePasswordForm">
+          <div class="form-group">
+            <label>Senha atual:</label>
+            <input type="password" id="currentPassword" required>
+          </div>
+          <div class="form-group">
+            <label>Nova senha:</label>
+            <input type="password" id="newPassword" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Alterar Senha</button>
+        </form>
+      </div>
+      <div class="card" id="usersCard" style="display:none;">
+        <h2>Usuários</h2>
+        <form id="addUserForm">
+          <div class="form-group">
+            <label>Usuário:</label>
+            <input type="text" id="newUsername" required>
+          </div>
+          <div class="form-group">
+            <label>Senha:</label>
+            <input type="password" id="newUserPassword" required>
+          </div>
+          <div class="form-group">
+            <label>Tipo:</label>
+            <select id="newUserType">
+              <option value="common">Comum</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary">Cadastrar Usuário</button>
+        </form>
+        <div id="usersList"></div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    let authToken = localStorage.getItem('authToken');
+    if (authToken) {
+      showAdmin();
+    }
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const response = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        authToken = result.token;
+        localStorage.setItem('authToken', authToken);
+        showAdmin();
+      } else {
+        alert('Erro: ' + result.error);
+      }
+    });
+    function showAdmin() {
+      document.getElementById('loginCard').style.display = 'none';
+      document.getElementById('adminPanel').style.display = 'block';
+      loadData();
+      fetch('/admin/status', { headers: { 'Authorization': 'Bearer ' + authToken } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.user_type === 'admin') {
+            document.getElementById('usersCard').style.display = 'block';
+            loadUsers();
+          } else {
+            document.getElementById('usersCard').style.display = 'none';
+          }
+        });
+    }
+    async function loadData() {
+      const response = await fetch('/admin/status', {
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      const data = await response.json();
+      document.getElementById('whatsappStatus').innerHTML =
+        '<div class="status ' + (data.whatsapp_connected ? 'success' : 'error') + '">' +
+        'Status: ' + (data.whatsapp_connected ? 'Conectado' : 'Desconectado') +
+        '</div>';
+      loadTokens();
+    }
+    async function connectWhatsApp() {
+      await fetch('/admin/connect-whatsapp', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      alert('Conectando...');
+      setTimeout(loadData, 2000);
+    }
+    async function checkQR() {
+      const response = await fetch('/admin/qr', {
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      const data = await response.json();
+      if (data.qr_code) {
+        document.getElementById('qrCode').style.display = 'block';
+        document.getElementById('qrCode').innerHTML = '';
+        new QRCode(document.getElementById('qrCode'), {
+          text: data.qr_code,
+          width: 256,
+          height: 256
+        });
+      } else {
+        document.getElementById('qrCode').style.display = 'none';
+      }
+    }
+    document.getElementById('tokenForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const response = await fetch('/admin/tokens', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + authToken
+        },
+        body: JSON.stringify({
+          name: document.getElementById('tokenName').value,
+          requests_limit: 1000
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        alert('Token: ' + result.token);
+        loadTokens();
+      }
+    });
+    document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const response = await fetch('/admin/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + authToken
+        },
+        body: JSON.stringify({
+          currentPassword: document.getElementById('currentPassword').value,
+          newPassword: document.getElementById('newPassword').value
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        alert('Senha alterada com sucesso!');
+        document.getElementById('changePasswordForm').reset();
+      } else {
+        alert('Erro: ' + result.error);
+      }
+    });
+    document.getElementById('addUserForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const response = await fetch('/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + authToken
+        },
+        body: JSON.stringify({
+          username: document.getElementById('newUsername').value,
+          password: document.getElementById('newUserPassword').value,
+          user_type: document.getElementById('newUserType').value
+        })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        alert('Usuário cadastrado!');
+        document.getElementById('addUserForm').reset();
+        loadUsers();
+      } else {
+        alert('Erro: ' + result.error);
+      }
+    });
+    async function loadTokens() {
+      const response = await fetch('/admin/tokens', {
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      const tokens = await response.json();
+      document.getElementById('tokensList').innerHTML = tokens.map(token =>
+        '<div style="border: 1px solid #ddd; padding: 10px; margin: 5px 0;">' +
+        '<strong>' + token.name + '</strong><br>' +
+        'Token: <code>' + token.token + '</code>' +
+        '</div>'
+      ).join('');
+    }
+    async function loadUsers() {
+      const response = await fetch('/admin/users', {
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      const users = await response.json();
+      document.getElementById('usersList').innerHTML = users.map(function(u) {
+        return '<div style="border:1px solid #ddd;padding:10px;margin:5px 0;">' +
+          '<strong>' + u.username + '</strong> (' + u.user_type + ')' +
+          '<button onclick="deleteUser(' + u.id + ')" class="btn btn-danger" style="float:right;">Excluir</button>' +
+        '</div>';
+      }).join('');
+    }
+    async function deleteUser(id) {
+      if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
+      const response = await fetch('/admin/users/' + id, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      if (response.ok) {
+        loadUsers();
+      } else {
+        const result = await response.json();
+        alert('Erro: ' + result.error);
+      }
+    }
+    setInterval(checkQR, 10000);
+  </script>
+</body>
+</html>`;
+  }
+
   async start() {
     try {
       await this.database.connect();
