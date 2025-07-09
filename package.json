@@ -5,11 +5,14 @@
   "scripts": {
     "start": "node src/start-admin.js",
     "start:admin": "node src/start-admin.js",
-    "dev": "node src/server.js"
+    "dev": "node src/server.js",
+    "clear-auth": "node scripts/clear-auth.js",
+    "test-db": "node scripts/test-db.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.5.0",
     "bcryptjs": "^3.0.2",
+    "dotenv": "^17.1.0",
     "express": "^4.18.2",
     "express-rate-limit": "^7.5.1",
     "jsonwebtoken": "^9.0.2",

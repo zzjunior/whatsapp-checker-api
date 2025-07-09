@@ -7,19 +7,36 @@ class Database {
 
   async connect() {
     try {
+      console.log('🔄 Tentando conectar ao MySQL...');
+      console.log(`📍 Host: ${process.env.DB_HOST}`);
+      console.log(`📍 Port: ${process.env.DB_PORT}`);
+      console.log(`📍 Database: ${process.env.DB_DATABASE}`);
+      console.log(`📍 User: ${process.env.DB_USERNAME}`);
+      
       this.connection = await mysql.createConnection({
         host: process.env.DB_HOST || 'localhost',
         user: process.env.DB_USERNAME || 'root',
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_DATABASE || 'whatsapp_checker',
-        port: process.env.DB_PORT || 3306,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+        port: parseInt(process.env.DB_PORT) || 3306,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        connectTimeout: 60000
       });
       
       console.log('✅ Conectado ao MySQL');
       await this.createTables();
     } catch (error) {
-      console.error('❌ Erro ao conectar ao MySQL:', error);
+      console.error('❌ Erro ao conectar ao MySQL:', error.message);
+      if (error.code === 'ECONNREFUSED') {
+        console.error('💡 Verifique se:');
+        console.error('   - O servidor MySQL está rodando');
+        console.error('   - O host e porta estão corretos');
+        console.error('   - Não há firewall bloqueando a conexão');
+      } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
+        console.error('💡 Erro de autenticação - verifique usuário/senha');
+      } else if (error.code === 'ER_BAD_DB_ERROR') {
+        console.error('💡 Database não existe - verifique o nome do banco');
+      }
       throw error;
     }
   }

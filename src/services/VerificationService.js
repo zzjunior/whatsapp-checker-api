@@ -6,7 +6,7 @@ class VerificationService {
   }
 
   // Verificar número com cache
-  async checkNumber(phoneNumber, tokenId = null, ipAddress = null, userAgent = null) {
+  async checkNumber(phoneNumber, tokenId = null, ipAddress = null, userAgent = null, forceCheck = false) {
     try {
       // Normalizar número
       const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
@@ -15,54 +15,49 @@ class VerificationService {
         throw new Error('Número inválido');
       }
 
-      // Verificar cache primeiro
-      const cached = await this.getCachedResult(cleanNumber);
-      if (cached) {
-        await this.logVerification(tokenId, cleanNumber, cached.is_valid, ipAddress, userAgent);
-        return {
-          number: cleanNumber,
-          original: phoneNumber,
-          exists: cached.is_valid,
-          jid: cached.whatsapp_jid,
-          cached: true,
-          checked_at: cached.last_checked
-        };
-      }
-
-      // Se não estiver no cache, verificar via WhatsApp
-      let result;
-      try {
-        if (this.whatsapp && this.whatsapp.socket) {
-          result = await this.whatsapp.checkNumber(cleanNumber);
-        } else {
-          // Fallback se WhatsApp não estiver conectado
-          result = {
-            number: cleanNumber,
-            exists: false,
-            jid: null
+      // Verificar no cache primeiro (apenas se não for forçado)
+      if (!forceCheck) {
+        const cached = await this.getCachedResult(cleanNumber);
+        if (cached) {
+          await this.logVerification(tokenId, cleanNumber, cached.is_valid, ipAddress, userAgent);
+          return {
+            phone: cleanNumber,
+            input: phoneNumber,
+            has_whatsapp: cached.is_valid,
+            whatsapp_jid: cached.whatsapp_jid,
+            from_cache: true,
+            checked_at: cached.last_checked
           };
         }
-      } catch (error) {
-        console.error('Erro ao verificar no WhatsApp:', error);
-        result = {
-          number: cleanNumber,
-          exists: false,
-          jid: null
-        };
       }
 
-      // Salvar no cache
+      // Verificar se WhatsApp está conectado
+      if (!this.whatsapp || !this.whatsapp.isConnected()) {
+        throw new Error('WhatsApp não está conectado. Tente novamente em alguns minutos.');
+      }
+
+      // Se não estiver no cache ou for forçado, verificar via WhatsApp
+      let result;
+      try {
+        result = await this.whatsapp.checkNumber(cleanNumber);
+      } catch (error) {
+        console.error('Erro ao verificar no WhatsApp:', error);
+        throw new Error('Erro ao verificar número no WhatsApp. Tente novamente.');
+      }
+
+      // Salvar/atualizar no cache
       await this.saveToCache(cleanNumber, result.exists, result.jid);
       
       // Log da verificação
       await this.logVerification(tokenId, cleanNumber, result.exists, ipAddress, userAgent);
 
       return {
-        number: cleanNumber,
-        original: phoneNumber,
-        exists: result.exists,
-        jid: result.jid,
-        cached: false,
+        phone: cleanNumber,
+        input: phoneNumber,
+        has_whatsapp: result.exists,
+        whatsapp_jid: result.jid,
+        from_cache: false,
+        forced_check: forceCheck,
         checked_at: new Date().toISOString()
       };
 

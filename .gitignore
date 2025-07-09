@@ -6,3 +6,4 @@ auth.json
 .env.production
 *.log
 database.sqlite
+scripts/

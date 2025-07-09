@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const WhatsAppChecker = require('./whatsapp/WhatsAppChecker');
 
@@ -10,19 +11,13 @@ class App {
   }
 
   routes() {
-    this.app.get('/check', async (req, res) => {
-      const number = req.query.number;
-      if (!number) {
-        return res.status(400).json({ error: 'Informe o número no formato 5588999999999' });
-      }
-
-      try {
-        const result = await this.whatsapp.checkNumber(number);
-        return res.json(result);
-      } catch (err) {
-        console.error('Erro ao verificar número:', err);
-        return res.status(500).json({ error: 'Erro interno ao checar número' });
-      }
+    // Todas as rotas foram movidas para server-admin.js
+    // Esta versão não tem rotas públicas por motivos de segurança
+    this.app.get('/', (req, res) => {
+      res.json({ 
+        message: 'WhatsApp Checker API - Use /admin para acessar o painel',
+        admin: 'http://localhost:3000/admin'
+      });
     });
   }
 

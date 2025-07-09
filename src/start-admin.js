@@ -1,3 +1,4 @@
+require('dotenv').config();
 const WhatsAppCheckerAPI = require('./server-admin');
 
 // Inicializar aplicação

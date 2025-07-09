@@ -53,6 +53,7 @@ class WhatsAppCheckerAPI {
     });
 
     this.app.post('/api/check', this.middlewareAuth.bind(this), this.checkNumber.bind(this));
+    this.app.get('/api/status', this.getWhatsAppStatus.bind(this));
     this.app.post('/admin/login', this.adminLogin.bind(this));
     this.app.get('/admin/status', this.middlewareAdminAuth.bind(this), this.getAdminStatus.bind(this));
     this.app.post('/admin/connect-whatsapp', this.middlewareAdminAuth.bind(this), this.connectWhatsApp.bind(this));
@@ -98,15 +99,38 @@ class WhatsAppCheckerAPI {
   // Handlers
   async checkNumber(req, res) {
     try {
-      const { phone } = req.body;
+      const { phone, force_check } = req.body;
       if (!phone) return res.status(400).json({ error: 'Número obrigatório' });
 
-      const result = await this.verificationService.checkNumber(phone, req.apiToken.id);
+      // Verificar se WhatsApp está conectado
+      if (!this.whatsappConnected) {
+        return res.status(503).json({ 
+          error: 'WhatsApp não está conectado', 
+          status: 'disconnected',
+          message: 'Aguarde a reconexão ou verifique o painel admin'
+        });
+      }
+
+      const result = await this.verificationService.checkNumber(
+        phone, 
+        req.apiToken.id, 
+        req.ip, 
+        req.get('User-Agent'),
+        force_check || false
+      );
       await this.authService.incrementTokenUsage(req.apiToken.id);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
+  }
+
+  getWhatsAppStatus(req, res) {
+    res.json({
+      connected: this.whatsappConnected,
+      status: this.whatsappConnected ? 'online' : 'offline',
+      message: this.whatsappConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado'
+    });
   }
 
   async adminLogin(req, res) {
@@ -270,6 +294,16 @@ class WhatsAppCheckerAPI {
       this.whatsappChecker.on('disconnected', () => {
         this.whatsappConnected = false;
         console.log('❌ WhatsApp OFF');
+      });
+
+      this.whatsappChecker.on('max_reconnect_attempts', () => {
+        console.log('❌ Máximo de tentativas de reconexão atingido. Aguardando nova tentativa...');
+        // Aguardar 5 minutos antes de tentar novamente
+        setTimeout(() => {
+          console.log('🔄 Reiniciando tentativas de conexão...');
+          this.whatsappChecker.reconnectAttempts = 0;
+          this.whatsappChecker.connect();
+        }, 5 * 60 * 1000);
       });
 
       this.app.listen(this.port, () => {
