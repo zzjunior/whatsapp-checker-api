@@ -12,6 +12,7 @@ API para verificar se um número possui WhatsApp, usando Baileys.js. Sem necessi
 - Feito isso acesse a rota ```/admin``` para acessar e conectar o whatsapp para utilizar a API;
 
 ### Doc API
+###### Acesse no [postman](https://www.postman.com/juniorsantos-5089914/whatsapp-checker-api/documentation/d7woiuq/whatsapp-checker-api)
 - Use as rotas 
 #### /api/check
 - Verificar se o número tem whatsapp;
