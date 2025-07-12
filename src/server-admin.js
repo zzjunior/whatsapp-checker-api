@@ -683,6 +683,99 @@ class WhatsAppCheckerAPI {
     }
   }
 
+  async forceReconnect(req, res) {
+    try {
+      const tokenId = req.apiToken.id;
+      const instanceId = req.apiToken.whatsapp_instance_id;
+      
+      if (!instanceId) {
+        return res.status(400).json({ error: 'Token não possui instância associada' });
+      }
+      
+      console.log(`🔄 Forçando reconexão da instância ${instanceId}...`);
+      
+      // Buscar dados da instância no banco
+      const instances = await this.database.query(
+        'SELECT * FROM whatsapp_instances WHERE id = ?',
+        [instanceId]
+      );
+      
+      if (instances.length === 0) {
+        return res.status(404).json({ error: 'Instância não encontrada' });
+      }
+      
+      const instanceData = instances[0];
+      
+      // Remover instância existente do manager
+      if (this.whatsappManager.instances.has(instanceId)) {
+        const oldInstance = this.whatsappManager.instances.get(instanceId);
+        try {
+          await oldInstance.disconnect();
+        } catch (e) {
+          console.log('Erro ao desconectar instância antiga:', e.message);
+        }
+        this.whatsappManager.instances.delete(instanceId);
+      }
+      
+      // Reinicializar instância
+      await this.whatsappManager.initializeInstance(instanceData);
+      
+      res.json({ 
+        success: true, 
+        message: 'Reconexão iniciada',
+        instance_id: instanceId 
+      });
+      
+    } catch (error) {
+      console.error('Erro ao forçar reconexão:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async checkAuthFiles(req, res) {
+    try {
+      const instanceId = req.apiToken.whatsapp_instance_id;
+      
+      if (!instanceId) {
+        return res.status(400).json({ error: 'Token não possui instância associada' });
+      }
+      
+      // Buscar dados da instância
+      const instances = await this.database.query(
+        'SELECT * FROM whatsapp_instances WHERE id = ?',
+        [instanceId]
+      );
+      
+      if (instances.length === 0) {
+        return res.status(404).json({ error: 'Instância não encontrada' });
+      }
+      
+      const instance = instances[0];
+      const authPath = instance.auth_path;
+      
+      // Verificar se arquivos existem
+      const fs = require('fs');
+      const path = require('path');
+      
+      const authDir = path.resolve(authPath);
+      const credsPath = path.join(authDir, 'creds.json');
+      
+      res.json({
+        instance_id: instanceId,
+        auth_path: authPath,
+        auth_dir_resolved: authDir,
+        creds_path: credsPath,
+        auth_dir_exists: fs.existsSync(authDir),
+        creds_exists: fs.existsSync(credsPath),
+        working_directory: process.cwd(),
+        files_in_auth: fs.existsSync(authDir) ? fs.readdirSync(authDir) : 'DIR_NOT_EXISTS'
+      });
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message, stack: error.stack });
+    }
+  }
+
   setupWebSocket() {
     this.io.on('connection', (socket) => {
       console.log('Cliente WebSocket conectado:', socket.id);
