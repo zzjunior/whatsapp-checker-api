@@ -5,6 +5,8 @@ const API_BASE = '';
 let currentUser = null;
 let whatsappInstances = [];
 let tokens = [];
+let wsClient = null;
+let currentQRModal = null;
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', function() {
@@ -13,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     loadPage('dashboard');
     checkWhatsAppStatus();
+    initWebSocket();
     
     // Atualizar status a cada 30 segundos
     setInterval(checkWhatsAppStatus, 30000);
@@ -367,6 +370,40 @@ function loadInstances() {
                 </div>
             </div>
         </div>
+        
+        <!-- Modal para QR Code -->
+        <div class="modal fade" id="qrCodeModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-qr-code me-2"></i>
+                            Conectar WhatsApp - <span id="qrInstanceName"></span>
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <div id="qrCodeContainer">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Gerando QR Code...</span>
+                            </div>
+                            <p class="text-muted">Gerando QR Code...</p>
+                        </div>
+                        <div class="alert alert-info mt-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Instruções:</strong><br>
+                            1. Abra o WhatsApp no seu celular<br>
+                            2. Vá em Configurações > Aparelhos conectados<br>
+                            3. Toque em "Conectar um aparelho"<br>
+                            4. Escaneie o QR Code acima
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
     
     document.getElementById('pageContent').innerHTML = content;
@@ -475,16 +512,50 @@ async function createInstance() {
 
 async function connectInstance(id) {
     try {
-        await apiRequest(`/admin/instances/${id}/connect`, 'POST');
-        showAlert('Conectando instância...', 'info');
+        // Buscar informações da instância
+        const instances = await apiRequest('/admin/instances');
+        const instance = instances.find(i => i.id === id);
         
-        // Recarregar após um tempo
-        setTimeout(() => {
-            loadInstancesData();
-        }, 2000);
+        if (!instance) {
+            showAlert('Instância não encontrada', 'error');
+            return;
+        }
+        
+        // Mostrar modal de QR code
+        document.getElementById('qrInstanceName').textContent = instance.name;
+        const modal = new bootstrap.Modal(document.getElementById('qrCodeModal'));
+        currentQRModal = modal;
+        modal.show();
+        
+        // Resetar conteúdo do modal
+        const container = document.getElementById('qrCodeContainer');
+        container.innerHTML = `
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Gerando QR Code...</span>
+            </div>
+            <p class="text-muted">Conectando e gerando QR Code...</p>
+        `;
+        
+        // Solicitar conexão via API
+        await apiRequest(`/admin/instances/${id}/connect`, 'POST');
+        
+        // Solicitar QR code via WebSocket
+        if (wsClient && wsClient.connected) {
+            wsClient.emit('request_qr', id);
+        } else {
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Conexão WebSocket não disponível. Tentando reconectar...
+                </div>
+            `;
+            initWebSocket();
+        }
+        
     } catch (error) {
         console.error('Erro ao conectar instância:', error);
         showAlert('Erro ao conectar instância: ' + error.message, 'danger');
+        hideQRModal();
     }
 }
 
@@ -1111,21 +1182,111 @@ function loadSettings() {
     `;
 }
 
+// WebSocket para QR codes e atualizações em tempo real
+function initWebSocket() {
+    const token = localStorage.getItem('admin_token');
+    if (!token) return;
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    
+    wsClient = io(wsUrl);
+    
+    wsClient.on('connect', () => {
+        console.log('WebSocket conectado');
+        wsClient.emit('authenticate', token);
+    });
+    
+    wsClient.on('authenticated', (data) => {
+        console.log('WebSocket autenticado');
+        wsClient.connected = true;
+    });
+    
+    wsClient.on('qr_code', (data) => {
+        console.log('QR Code recebido para instância', data.instanceId);
+        showQRCode(data.instanceId, data.qr);
+    });
+    
+    wsClient.on('instance_connected', (data) => {
+        console.log('Instância conectada:', data.instanceId);
+        hideQRModal();
+        showAlert('WhatsApp conectado com sucesso!', 'success');
+        setTimeout(() => loadInstancesData(), 1000);
+    });
+    
+    wsClient.on('instance_disconnected', (data) => {
+        console.log('Instância desconectada:', data.instanceId);
+        hideQRModal();
+        showAlert('WhatsApp desconectado', 'warning');
+        setTimeout(() => loadInstancesData(), 1000);
+    });
+    
+    wsClient.on('instance_status_changed', (data) => {
+        console.log('Status da instância alterado:', data);
+        setTimeout(() => loadInstancesData(), 500);
+    });
+    
+    wsClient.on('instances_status', (instances) => {
+        console.log('Status das instâncias recebido:', instances);
+        // Atualizar interface se necessário
+    });
+    
+    wsClient.on('authentication_failed', () => {
+        console.error('Falha na autenticação WebSocket');
+        logout();
+    });
+    
+    wsClient.on('error', (error) => {
+        console.error('Erro WebSocket:', error);
+    });
+    
+    wsClient.on('disconnect', () => {
+        console.log('WebSocket desconectado');
+        wsClient.connected = false;
+    });
+}
+
+// Funções para QR Code
+function showQRCode(instanceId, qrData) {
+    const container = document.getElementById('qrCodeContainer');
+    container.innerHTML = '<div id="qrcode"></div>';
+    
+    // Gerar QR Code usando QRCode.js
+    new QRCode(document.getElementById("qrcode"), {
+        text: qrData,
+        width: 256,
+        height: 256,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+    });
+}
+
+function hideQRModal() {
+    if (currentQRModal) {
+        currentQRModal.hide();
+        currentQRModal = null;
+    }
+}
+
 function showAlert(message, type = 'info') {
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    // Criar alerta Bootstrap
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show position-fixed" 
+             style="top: 20px; right: 20px; z-index: 9999; max-width: 400px;" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
     `;
     
-    document.body.appendChild(alertDiv);
+    // Adicionar ao body
+    document.body.insertAdjacentHTML('beforeend', alertHtml);
     
-    // Auto remove após 5 segundos
+    // Remover automaticamente após 5 segundos
     setTimeout(() => {
-        if (alertDiv && alertDiv.parentNode) {
-            alertDiv.remove();
+        const alerts = document.querySelectorAll('.alert');
+        if (alerts.length > 0) {
+            alerts[alerts.length - 1].remove();
         }
     }, 5000);
 }
