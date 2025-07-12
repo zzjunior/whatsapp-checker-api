@@ -4,10 +4,12 @@ const path = require('path');
 const config = require('../config/whatsapp');
 
 class WhatsAppChecker extends EventEmitter {
-  constructor() {
+  constructor(customAuthDir = null) {
     super();
     this.socket = null;
-    this.authDir = path.join(__dirname, '../../auth');
+    this.authDir = customAuthDir 
+      ? path.join(__dirname, '../../', customAuthDir)
+      : path.join(__dirname, '../../auth');
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = config.maxReconnectAttempts;
     this.reconnectDelay = config.reconnectDelay;
@@ -208,16 +210,37 @@ class WhatsAppChecker extends EventEmitter {
     }
   }
 
-  disconnect() {
-    if (this.socket) {
-      this.socket.end();
-      this.socket = null;
-      console.log('🔌 WhatsApp desconectado');
+  // Verificar se está conectado
+  isConnected() {
+    return this.socket && this.socket.readyState === 1; // 1 = OPEN
+  }
+
+  // Obter status da conexão
+  getConnectionStatus() {
+    if (!this.socket) return 'disconnected';
+    
+    switch (this.socket.readyState) {
+      case 0: return 'connecting';
+      case 1: return 'connected';
+      case 2: return 'closing';
+      case 3: return 'closed';
+      default: return 'unknown';
     }
   }
 
-  isConnected() {
-    return this.socket && this.socket.user;
+  // Desconectar gracefully
+  async disconnect() {
+    try {
+      if (this.socket) {
+        console.log('🛑 Desconectando WhatsApp...');
+        await this.socket.logout();
+        this.socket = null;
+      }
+      this.isConnecting = false;
+      this.reconnectAttempts = 0;
+    } catch (error) {
+      console.error('❌ Erro ao desconectar:', error);
+    }
   }
 }
 

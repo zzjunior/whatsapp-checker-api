@@ -1,25 +1,38 @@
 const express = require('express');
+const path = require('path');
+const http = require('http');
+const socketIo = require('socket.io');
 const rateLimit = require('express-rate-limit');
 const Database = require('./database/Database');
 const AuthService = require('./services/AuthService');
 const VerificationService = require('./services/VerificationService');
 const WhatsAppChecker = require('./whatsapp/WhatsAppChecker');
+const WhatsAppManager = require('./whatsapp/WhatsAppManager');
 
 class WhatsAppCheckerAPI {
   constructor() {
     this.app = express();
+    this.server = http.createServer(this.app);
+    this.io = socketIo(this.server, {
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+      }
+    });
     this.port = process.env.PORT || 3000;
     
     // Inicializar serviços
     this.database = new Database();
     this.authService = new AuthService(this.database);
     this.whatsappChecker = new WhatsAppChecker();
+    this.whatsappManager = new WhatsAppManager(this.database);
     this.verificationService = new VerificationService(this.database, this.whatsappChecker);
     
     // Estado do WhatsApp
     this.whatsappConnected = false;
     this.currentQRCode = null;
     
+    this.setupWebSocket();
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -55,19 +68,65 @@ class WhatsAppCheckerAPI {
     this.app.post('/api/check', this.middlewareAuth.bind(this), this.checkNumber.bind(this));
     this.app.get('/api/status', this.getWhatsAppStatus.bind(this));
     this.app.post('/admin/login', this.adminLogin.bind(this));
+    this.app.post('/admin/register', this.registerUser.bind(this));
     this.app.get('/admin/status', this.middlewareAdminAuth.bind(this), this.getAdminStatus.bind(this));
+    this.app.get('/admin/stats', this.middlewareAdminAuth.bind(this), this.getStats.bind(this));
+    
+    // WhatsApp Instances
+    this.app.get('/admin/instances', this.middlewareAdminAuth.bind(this), this.getUserInstances.bind(this));
+    this.app.post('/admin/instances', this.middlewareAdminAuth.bind(this), this.createUserInstance.bind(this));
+    this.app.delete('/admin/instances/:id', this.middlewareAdminAuth.bind(this), this.deleteUserInstance.bind(this));
+    this.app.post('/admin/instances/:id/connect', this.middlewareAdminAuth.bind(this), this.connectUserInstance.bind(this));
+    this.app.post('/admin/instances/:id/disconnect', this.middlewareAdminAuth.bind(this), this.disconnectUserInstance.bind(this));
+    
+    // Legacy WhatsApp (backward compatibility)
     this.app.post('/admin/connect-whatsapp', this.middlewareAdminAuth.bind(this), this.connectWhatsApp.bind(this));
     this.app.get('/admin/qr', this.middlewareAdminAuth.bind(this), this.getQRCode.bind(this));
+    
+    // Tokens
     this.app.post('/admin/tokens', this.middlewareAdminAuth.bind(this), this.createToken.bind(this));
     this.app.get('/admin/tokens', this.middlewareAdminAuth.bind(this), this.listTokens.bind(this));
+    
+    // User management
     this.app.post('/admin/change-password', this.middlewareAdminAuth.bind(this), this.changePassword.bind(this));
     this.app.post('/admin/users', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.addUser.bind(this));
     this.app.get('/admin/users', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.listUsers.bind(this));
     this.app.delete('/admin/users/:id', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.deleteUser.bind(this));
 
-    // Admin page
+    // Static files and pages
+    this.app.use('/admin/assets', express.static('public/assets'));
+    this.app.get('/admin/dashboard', (req, res) => {
+      res.sendFile(path.join(__dirname, '../public/dashboard.html'));
+    });
+    this.app.get('/admin', (req, res) => {
+      res.sendFile(path.join(__dirname, '../public/login.html'));
+    });
     this.app.get('/admin', (req, res) => {
       res.send(this.getAdminHTML());
+    });
+    
+    // Health check endpoint
+    this.app.get('/health', async (req, res) => {
+      try {
+        const stats = this.whatsappManager.getInstancesStats();
+        const dbStatus = await this.database.query('SELECT 1 as alive');
+        
+        res.json({
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+          memory: process.memoryUsage(),
+          instances: stats,
+          database: dbStatus.length > 0 ? 'connected' : 'disconnected',
+          whatsapp_legacy: this.whatsappConnected
+        });
+      } catch (error) {
+        res.status(503).json({
+          status: 'unhealthy',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
     });
   }
 
@@ -306,9 +365,18 @@ class WhatsAppCheckerAPI {
         }, 5 * 60 * 1000);
       });
 
-      this.app.listen(this.port, () => {
+      // Inicializar instâncias salvas automaticamente
+      console.log('🔄 Inicializando instâncias WhatsApp salvas...');
+      await this.whatsappManager.initializeAllInstances();
+
+      // Configurar graceful shutdown
+      this.setupGracefulShutdown();
+
+      this.server.listen(this.port, () => {
         console.log(`🚀 http://localhost:${this.port}`);
         console.log(`🔧 http://localhost:${this.port}/admin`);
+        console.log(`📡 WebSocket server ativo`);
+        console.log(`✅ Sistema iniciado com persistência de sessão`);
       });
 
     } catch (error) {
@@ -316,6 +384,271 @@ class WhatsAppCheckerAPI {
       process.exit(1);
     }
   }
+
+  // Novos métodos para o sistema multi-usuário
+
+  async registerUser(req, res) {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ error: 'Username e password são obrigatórios' });
+      }
+
+      const user = await this.authService.createUser(username, password, 'user');
+      res.json({ 
+        message: 'Usuário criado com sucesso',
+        user: { id: user.id, username: user.username, role: user.role }
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  async getStats(req, res) {
+    try {
+      const userId = req.user.role === 'admin' ? null : req.user.id;
+      const stats = await this.verificationService.getStats(userId);
+      
+      // Adicionar estatísticas de tokens
+      const tokenStats = await this.database.query(
+        req.user.role === 'admin' 
+          ? 'SELECT COUNT(*) as total FROM api_tokens WHERE active = TRUE'
+          : 'SELECT COUNT(*) as total FROM api_tokens WHERE user_id = ? AND active = TRUE',
+        req.user.role === 'admin' ? [] : [req.user.id]
+      );
+      
+      stats.active_tokens = tokenStats[0]?.total || 0;
+      
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async getUserInstances(req, res) {
+    try {
+      const instances = await this.whatsappManager.getUserInstances(req.user.id);
+      res.json(instances);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async createUserInstance(req, res) {
+    try {
+      const { name } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Nome da instância é obrigatório' });
+      }
+
+      const { instanceId } = await this.whatsappManager.createInstance(req.user.id, name);
+      
+      res.json({ 
+        message: 'Instância criada com sucesso',
+        instanceId 
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async deleteUserInstance(req, res) {
+    try {
+      const instanceId = parseInt(req.params.id);
+      await this.whatsappManager.deleteInstance(instanceId, req.user.id);
+      
+      res.json({ message: 'Instância removida com sucesso' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async connectUserInstance(req, res) {
+    try {
+      const instanceId = parseInt(req.params.id);
+      await this.whatsappManager.connectInstance(instanceId);
+      
+      res.json({ message: 'Conectando instância...' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async disconnectUserInstance(req, res) {
+    try {
+      const instanceId = parseInt(req.params.id);
+      await this.whatsappManager.disconnectInstance(instanceId);
+      
+      res.json({ message: 'Instância desconectada' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  setupWebSocket() {
+    this.io.on('connection', (socket) => {
+      console.log('Cliente WebSocket conectado:', socket.id);
+      
+      // Autenticação do socket
+      socket.on('authenticate', async (token) => {
+        try {
+          const user = await this.authService.validateToken(token);
+          if (user) {
+            socket.userId = user.id;
+            socket.userRole = user.role;
+            socket.join(`user_${user.id}`);
+            
+            console.log(`Socket autenticado para usuário ${user.id} (${user.role})`);
+            socket.emit('authenticated', { success: true });
+            
+            // Enviar status atual das instâncias do usuário
+            const instances = await this.whatsappManager.getUserInstances(user.id);
+            socket.emit('instances_status', instances);
+          } else {
+            socket.emit('authentication_failed');
+            socket.disconnect();
+          }
+        } catch (error) {
+          console.error('Erro na autenticação do socket:', error);
+          socket.emit('authentication_failed');
+          socket.disconnect();
+        }
+      });
+      
+      // Requisição de QR code para uma instância específica
+      socket.on('request_qr', async (instanceId) => {
+        try {
+          if (!socket.userId) {
+            socket.emit('error', { message: 'Não autenticado' });
+            return;
+          }
+          
+          const instance = await this.whatsappManager.getUserInstance(socket.userId, instanceId);
+          if (!instance) {
+            socket.emit('error', { message: 'Instância não encontrada' });
+            return;
+          }
+          
+          // Conectar a instância e emitir QR code quando disponível
+          await this.whatsappManager.connectInstance(instanceId, {
+            onQRCode: (qr) => {
+              socket.emit('qr_code', { instanceId, qr });
+            },
+            onConnected: () => {
+              socket.emit('instance_connected', { instanceId });
+              this.io.to(`user_${socket.userId}`).emit('instance_status_changed', {
+                instanceId,
+                status: 'connected'
+              });
+            },
+            onDisconnected: () => {
+              socket.emit('instance_disconnected', { instanceId });
+              this.io.to(`user_${socket.userId}`).emit('instance_status_changed', {
+                instanceId,
+                status: 'disconnected'
+              });
+            }
+          });
+        } catch (error) {
+          console.error('Erro ao solicitar QR code:', error);
+          socket.emit('error', { message: 'Erro ao conectar instância' });
+        }
+      });
+      
+      socket.on('disconnect', () => {
+        console.log('Cliente WebSocket desconectado:', socket.id);
+      });
+    });
+  }
+
+  // Método para emitir eventos para usuários específicos
+  emitToUser(userId, event, data) {
+    this.io.to(`user_${userId}`).emit(event, data);
+  }
+
+  // Método para emitir eventos para todos os usuários
+  emitToAll(event, data) {
+    this.io.emit(event, data);
+  }
+
+  // Configurar shutdown graceful para preservar sessões
+  setupGracefulShutdown() {
+    const gracefulShutdown = async (signal) => {
+      console.log(`\n🛑 Recebido sinal ${signal}, iniciando shutdown graceful...`);
+      
+      try {
+        // Fechar servidor HTTP
+        this.server.close(() => {
+          console.log('🛑 Servidor HTTP fechado');
+        });
+        
+        // Desconectar instâncias gracefully (mantém auth files)
+        console.log('🛑 Salvando sessões WhatsApp...');
+        await this.whatsappManager.disconnectAllInstances();
+        
+        // Fechar conexão com banco
+        await this.database.disconnect();
+        console.log('🛑 Banco de dados desconectado');
+        
+        console.log('✅ Shutdown graceful concluído');
+        process.exit(0);
+      } catch (error) {
+        console.error('❌ Erro durante shutdown:', error);
+        process.exit(1);
+      }
+    };
+
+    // Capturar sinais de sistema
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    
+    // Capturar uncaught exceptions
+    process.on('uncaughtException', (error) => {
+      console.error('❌ Uncaught Exception:', error);
+      gracefulShutdown('UNCAUGHT_EXCEPTION');
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+      gracefulShutdown('UNHANDLED_REJECTION');
+    });
+  }
 }
+
+/*
+=== RATE LIMITING - POR QUE É NECESSÁRIO? ===
+
+1. PROTEÇÃO CONTRA ATAQUES:
+   - DDoS (Distributed Denial of Service)
+   - Brute force em logins
+   - Spam de requisições
+
+2. PROTEÇÃO DA INFRAESTRUTURA:
+   - Evita sobrecarga do servidor
+   - Protege o banco de dados
+   - Mantém a API responsiva
+
+3. CONTROLE DE CUSTOS:
+   - WhatsApp Web tem limites não oficiais
+   - Evita bloqueios temporários
+   - Preserva recursos do servidor
+
+4. FAIR USE:
+   - Garante que todos os usuários tenham acesso
+   - Evita que um usuário monopolize recursos
+   - Distribui carga de forma equilibrada
+
+5. CONFORMIDADE:
+   - Segue boas práticas de API
+   - Atende requisitos de segurança
+   - Facilita auditoria
+
+CONFIGURAÇÃO ATUAL:
+- 100 requisições por 15 minutos por IP
+- Aplicado apenas em rotas /api/
+- Pode ser personalizado por usuário
+*/
 
 module.exports = WhatsAppCheckerAPI;

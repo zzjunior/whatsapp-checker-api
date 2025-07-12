@@ -5,6 +5,10 @@
     }
   },
   "deploy": {
-    "startCommand": "node src/start-admin.js"
+    "startCommand": "node src/start-admin.js",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 100,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
   }
 }

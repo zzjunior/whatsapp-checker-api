@@ -150,6 +150,28 @@ class AuthService {
       throw error;
     }
   }
+
+  // Validar token para WebSocket
+  async validateToken(token) {
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret);
+      
+      // Verificar se usuário ainda existe
+      const users = await this.db.query(
+        'SELECT id, username, role FROM users WHERE id = ?',
+        [decoded.id]
+      );
+
+      if (users.length === 0) {
+        throw new Error('Usuário não encontrado');
+      }
+
+      return users[0];
+    } catch (error) {
+      console.error('Token validation error:', error);
+      return null;
+    }
+  }
 }
 
 module.exports = AuthService;

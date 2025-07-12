@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Checker - Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+        }
+        .login-card {
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        }
+        .login-header {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            color: white;
+            border-radius: 15px 15px 0 0;
+        }
+        .btn-whatsapp {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            border: none;
+            color: white;
+        }
+        .btn-whatsapp:hover {
+            background: linear-gradient(135deg, #128C7E, #25D366);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card login-card">
+                    <div class="card-header login-header text-center py-4">
+                        <i class="bi bi-whatsapp fs-1 mb-2"></i>
+                        <h3 class="mb-0">WhatsApp Checker</h3>
+                        <p class="mb-0 opacity-75">Sistema de Verificação</p>
+                    </div>
+                    <div class="card-body p-4">
+                        <div id="loginAlert"></div>
+                        
+                        <form id="loginForm">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">
+                                    <i class="bi bi-person me-2"></i>Usuário
+                                </label>
+                                <input type="text" class="form-control" id="username" required>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <label for="password" class="form-label">
+                                    <i class="bi bi-lock me-2"></i>Senha
+                                </label>
+                                <input type="password" class="form-control" id="password" required>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-whatsapp w-100 py-2" id="loginBtn">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>
+                                Entrar
+                            </button>
+                        </form>
+                        
+                        <hr class="my-4">
+                        
+                        <div class="text-center">
+                            <p class="text-muted mb-2">Não tem uma conta?</p>
+                            <button class="btn btn-outline-secondary" id="registerBtn">
+                                <i class="bi bi-person-plus me-2"></i>
+                                Criar Conta
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Registro -->
+    <div class="modal fade" id="registerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-person-plus me-2"></i>
+                        Criar Nova Conta
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="registerForm">
+                        <div class="mb-3">
+                            <label for="regUsername" class="form-label">Usuário</label>
+                            <input type="text" class="form-control" id="regUsername" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="regPassword" class="form-label">Senha</label>
+                            <input type="password" class="form-control" id="regPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="regPasswordConfirm" class="form-label">Confirmar Senha</label>
+                            <input type="password" class="form-control" id="regPasswordConfirm" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-whatsapp" id="createAccountBtn">
+                        <i class="bi bi-check-lg me-2"></i>
+                        Criar Conta
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = '';
+        
+        function showAlert(message, type = 'danger') {
+            const alertDiv = document.getElementById('loginAlert');
+            alertDiv.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
+
+        // Login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Entrando...';
+            
+            try {
+                const response = await fetch('/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('adminToken', data.token);
+                    localStorage.setItem('userInfo', JSON.stringify(data.user));
+                    window.location.href = '/admin/dashboard';
+                } else {
+                    showAlert(data.error || 'Erro ao fazer login');
+                }
+            } catch (error) {
+                showAlert('Erro de conexão. Tente novamente.');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Entrar';
+            }
+        });
+
+        // Registro
+        document.getElementById('registerBtn').addEventListener('click', () => {
+            new bootstrap.Modal(document.getElementById('registerModal')).show();
+        });
+
+        document.getElementById('createAccountBtn').addEventListener('click', async () => {
+            const username = document.getElementById('regUsername').value;
+            const password = document.getElementById('regPassword').value;
+            const passwordConfirm = document.getElementById('regPasswordConfirm').value;
+            
+            if (!username || !password) {
+                alert('Preencha todos os campos');
+                return;
+            }
+            
+            if (password !== passwordConfirm) {
+                alert('Senhas não conferem');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    bootstrap.Modal.getInstance(document.getElementById('registerModal')).hide();
+                    showAlert('Conta criada com sucesso! Faça login.', 'success');
+                    document.getElementById('registerForm').reset();
+                } else {
+                    alert(data.error || 'Erro ao criar conta');
+                }
+            } catch (error) {
+                alert('Erro de conexão. Tente novamente.');
+            }
+        });
+    </script>
+</body>
+</html>

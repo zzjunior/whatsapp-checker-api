@@ -7,7 +7,14 @@
     "start:admin": "node src/start-admin.js",
     "dev": "node src/server.js",
     "clear-auth": "node scripts/clear-auth.js",
-    "test-db": "node scripts/test-db.js"
+    "test-db": "node scripts/test-db.js",
+    "deploy": "git add . && git commit -m 'deploy: atualizações' && git push origin main",
+    "deploy:railway": "railway deploy",
+    "logs": "railway logs",
+    "logs:follow": "railway logs --follow",
+    "status": "railway status",
+    "health": "curl $RAILWAY_STATIC_URL/health || curl http://localhost:3000/health",
+    "env": "railway variables"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.5.0",
@@ -18,6 +25,7 @@
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.14.1",
     "qrcode-terminal": "^0.12.0",
+    "socket.io": "^4.8.1",
     "uuid": "^11.1.0"
   }
 }

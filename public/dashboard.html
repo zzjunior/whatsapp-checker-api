@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Checker - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 250px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .sidebar.collapsed {
+            width: 80px;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            min-height: 100vh;
+            background-color: #f8f9fa;
+            transition: all 0.3s;
+        }
+        
+        .main-content.expanded {
+            margin-left: 80px;
+        }
+        
+        .sidebar-header {
+            padding: 1rem;
+            color: white;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .sidebar-menu li {
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .sidebar-menu a:hover,
+        .sidebar-menu a.active {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        
+        .sidebar-menu i {
+            width: 20px;
+            margin-right: 10px;
+        }
+        
+        .collapsed .sidebar-menu span {
+            display: none;
+        }
+        
+        .top-navbar {
+            background: white;
+            border-bottom: 1px solid #dee2e6;
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .status-badge {
+            font-size: 0.75rem;
+        }
+        
+        .card-stats {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .card-whatsapp {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            color: white;
+        }
+        
+        .btn-whatsapp {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            border: none;
+            color: white;
+        }
+        
+        .btn-whatsapp:hover {
+            background: linear-gradient(135deg, #128C7E, #25D366);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h4 class="mb-0">
+                <i class="bi bi-whatsapp me-2"></i>
+                <span>WA Checker</span>
+            </h4>
+            <small class="opacity-75">
+                <span id="userRole">Admin</span> - <span id="userName">Usuario</span>
+            </small>
+        </div>
+        
+        <ul class="sidebar-menu">
+            <li>
+                <a href="#" class="menu-link active" data-page="dashboard">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="menu-link" data-page="instances">
+                    <i class="bi bi-phone"></i>
+                    <span>WhatsApp</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="menu-link" data-page="tokens">
+                    <i class="bi bi-key"></i>
+                    <span>Tokens API</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="menu-link" data-page="logs">
+                    <i class="bi bi-list-check"></i>
+                    <span>Logs</span>
+                </a>
+            </li>
+            <li id="usersMenu" style="display: none;">
+                <a href="#" class="menu-link" data-page="users">
+                    <i class="bi bi-people"></i>
+                    <span>Usuários</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="menu-link" data-page="settings">
+                    <i class="bi bi-gear"></i>
+                    <span>Configurações</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" onclick="logout()">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Sair</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <!-- Top Navbar -->
+        <div class="top-navbar d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <button class="btn btn-outline-secondary me-3" onclick="toggleSidebar()">
+                    <i class="bi bi-list"></i>
+                </button>
+                <h2 class="mb-0" id="pageTitle">Dashboard</h2>
+            </div>
+            
+            <div class="d-flex align-items-center">
+                <span class="badge bg-success status-badge me-3" id="whatsappStatus">
+                    <i class="bi bi-circle-fill me-1"></i>
+                    WhatsApp: Verificando...
+                </span>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-2"></i>
+                        <span id="topUserName">Usuario</span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Perfil</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" onclick="logout()"><i class="bi bi-box-arrow-right me-2"></i>Sair</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page Content -->
+        <div class="container-fluid px-4">
+            <div id="pageContent">
+                <!-- Dashboard será carregado aqui -->
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="assets/js/websocket.js"></script>
+    <script src="assets/js/dashboard.js"></script>
+</body>
+</html>
