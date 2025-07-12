@@ -634,10 +634,36 @@ class WhatsAppCheckerAPI {
   async connectUserInstance(req, res) {
     try {
       const instanceId = parseInt(req.params.id);
-      await this.whatsappManager.connectInstance(instanceId);
+      console.log(`🔄 Conectando instância ${instanceId} via HTTP...`);
+      
+      // Conectar a instância com callbacks para WebSocket
+      await this.whatsappManager.connectInstance(instanceId, {
+        onQRCode: (qr) => {
+          console.log(`📱 QR Code gerado para instância ${instanceId}, enviando via WebSocket`);
+          // Enviar QR code para todos os usuários conectados da instância
+          this.io.emit('qr_code', { instanceId, qr });
+        },
+        onConnected: () => {
+          console.log(`✅ Instância ${instanceId} conectada, enviando via WebSocket`);
+          this.io.emit('instance_connected', { instanceId });
+          this.io.emit('instance_status_changed', {
+            instanceId,
+            status: 'connected'
+          });
+        },
+        onDisconnected: () => {
+          console.log(`❌ Instância ${instanceId} desconectada, enviando via WebSocket`);
+          this.io.emit('instance_disconnected', { instanceId });
+          this.io.emit('instance_status_changed', {
+            instanceId,
+            status: 'disconnected'
+          });
+        }
+      });
       
       res.json({ message: 'Conectando instância...' });
     } catch (error) {
+      console.error(`❌ Erro ao conectar instância ${req.params.id}:`, error);
       res.status(500).json({ error: error.message });
     }
   }

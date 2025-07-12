@@ -1308,7 +1308,22 @@ function initWebSocket() {
     
     wsClient.on('qr_code', (data) => {
         console.log('QR Code recebido para instância', data.instanceId);
-        showQRCode(data.instanceId, data.qr);
+        console.log('QR Data:', data.qr);
+        
+        // Verificar se o modal QR está aberto
+        const qrModal = document.getElementById('qrCodeModal');
+        if (qrModal && qrModal.classList.contains('show')) {
+            console.log('Modal QR está aberto, exibindo QR Code');
+            showQRCode(data.instanceId, data.qr);
+        } else {
+            console.log('Modal QR não está aberto, abrindo modal e exibindo QR Code');
+            // Abrir modal e mostrar QR Code
+            const modal = new bootstrap.Modal(qrModal);
+            modal.show();
+            setTimeout(() => {
+                showQRCode(data.instanceId, data.qr);
+            }, 500);
+        }
     });
     
     wsClient.on('instance_connected', (data) => {
@@ -1352,18 +1367,39 @@ function initWebSocket() {
 
 // Funções para QR Code
 function showQRCode(instanceId, qrData) {
+    console.log('Mostrando QR Code para instância', instanceId);
     const container = document.getElementById('qrCodeContainer');
+    
+    if (!container) {
+        console.error('Container qrCodeContainer não encontrado');
+        return;
+    }
+    
     container.innerHTML = '<div id="qrcode"></div>';
     
-    // Gerar QR Code usando QRCode.js
-    new QRCode(document.getElementById("qrcode"), {
-        text: qrData,
-        width: 256,
-        height: 256,
-        colorDark: "#000000",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M
-    });
+    // Verificar se QRCode está disponível
+    if (typeof QRCode === 'undefined') {
+        console.error('QRCode.js não está carregado');
+        container.innerHTML = '<div class="alert alert-danger">Erro: QRCode.js não carregado</div>';
+        return;
+    }
+    
+    try {
+        // Gerar QR Code usando QRCode.js
+        new QRCode(document.getElementById("qrcode"), {
+            text: qrData,
+            width: 256,
+            height: 256,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+        });
+        
+        console.log('QR Code gerado com sucesso');
+    } catch (error) {
+        console.error('Erro ao gerar QR Code:', error);
+        container.innerHTML = '<div class="alert alert-danger">Erro ao gerar QR Code</div>';
+    }
 }
 
 async function deleteUser(userId, username) {
