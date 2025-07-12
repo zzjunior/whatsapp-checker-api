@@ -36,6 +36,12 @@ class WhatsAppManager {
   setupInstanceEvents(instanceId, checker, callbacks = {}) {
     checker.on('ready', async () => {
       await this.updateInstanceStatus(instanceId, 'connected');
+      
+      // Fazer backup da sessão quando conectar
+      setTimeout(() => {
+        this.backupSessionToDatabase(instanceId);
+      }, 5000); // Aguardar 5s para sessão estabilizar
+      
       if (callbacks.onConnected) {
         callbacks.onConnected();
       }
@@ -235,9 +241,18 @@ class WhatsAppManager {
                       fs.existsSync(`${auth_path}/creds.json`);
     
     if (!authExists) {
-      console.log(`⚠️  Instância ${id}: Auth files não encontrados, status: disconnected`);
-      await this.updateInstanceStatus(id, 'disconnected');
-      return;
+      console.log(`⚠️  Instância ${id}: Auth files não encontrados, tentando restaurar do banco...`);
+      
+      // Tentar restaurar do banco
+      const restored = await this.restoreSessionFromDatabase(id, auth_path);
+      
+      if (!restored) {
+        console.log(`❌ Instância ${id}: Não foi possível restaurar, status: disconnected`);
+        await this.updateInstanceStatus(id, 'disconnected');
+        return;
+      }
+      
+      console.log(`✅ Instância ${id}: Sessão restaurada do banco!`);
     }
     
     // Criar WhatsAppChecker
@@ -322,6 +337,69 @@ class WhatsAppManager {
     }
     
     return { total, connected, disconnected };
+  }
+  
+  // Backup da sessão para o banco
+  async backupSessionToDatabase(instanceId) {
+    try {
+      const instance = this.instances.get(instanceId);
+      if (!instance) return;
+      
+      const authPath = instance.authDir || instance.authPath;
+      if (!authPath) return;
+      
+      const fs = require('fs');
+      const path = require('path');
+      
+      const credsPath = path.join(authPath, 'creds.json');
+      
+      if (fs.existsSync(credsPath)) {
+        const sessionData = fs.readFileSync(credsPath, 'utf8');
+        
+        await this.db.query(
+          'UPDATE whatsapp_instances SET session_data = ?, session_backup_at = NOW() WHERE id = ?',
+          [sessionData, instanceId]
+        );
+        
+        console.log(`💾 Sessão da instância ${instanceId} salva no banco`);
+      }
+    } catch (error) {
+      console.error(`❌ Erro ao fazer backup da sessão ${instanceId}:`, error);
+    }
+  }
+  
+  // Restaurar sessão do banco
+  async restoreSessionFromDatabase(instanceId, authPath) {
+    try {
+      const sessions = await this.db.query(
+        'SELECT session_data FROM whatsapp_instances WHERE id = ? AND session_data IS NOT NULL',
+        [instanceId]
+      );
+      
+      if (sessions.length === 0) {
+        console.log(`📭 Nenhum backup de sessão encontrado para instância ${instanceId}`);
+        return false;
+      }
+      
+      const sessionData = sessions[0].session_data;
+      
+      const fs = require('fs');
+      const path = require('path');
+      
+      // Criar diretório se não existir
+      if (!fs.existsSync(authPath)) {
+        fs.mkdirSync(authPath, { recursive: true });
+      }
+      
+      const credsPath = path.join(authPath, 'creds.json');
+      fs.writeFileSync(credsPath, sessionData);
+      
+      console.log(`🔄 Sessão da instância ${instanceId} restaurada do banco`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Erro ao restaurar sessão ${instanceId}:`, error);
+      return false;
+    }
   }
 }
 

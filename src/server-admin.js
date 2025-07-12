@@ -156,8 +156,17 @@ class WhatsAppCheckerAPI {
       });
     });
     
-    // Debug endpoint para verificar estado das instâncias
+    // Debug endpoint para verificar estado das instâncias (com token API)
+    this.app.get('/api/debug/instances', this.middlewareAuth.bind(this), this.debugInstancesAPI.bind(this));
+    
+    // Debug endpoint para verificar estado das instâncias (admin)
     this.app.get('/debug/instances', this.middlewareAdminAuth.bind(this), this.debugInstances.bind(this));
+    
+    // Endpoint para forçar reconexão de instância
+    this.app.post('/api/reconnect', this.middlewareAuth.bind(this), this.forceReconnect.bind(this));
+    
+    // Endpoint para verificar arquivos de auth
+    this.app.get('/api/check-auth', this.middlewareAuth.bind(this), this.checkAuthFiles.bind(this));
   }
 
   // Middlewares
@@ -621,6 +630,56 @@ class WhatsAppCheckerAPI {
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
+    }
+  }
+
+  async debugInstancesAPI(req, res) {
+    try {
+      const tokenId = req.apiToken.id;
+      const instanceId = req.apiToken.whatsapp_instance_id;
+      
+      // Verificar instâncias no banco
+      const dbInstances = await this.database.query('SELECT * FROM whatsapp_instances ORDER BY id');
+      
+      // Verificar instâncias no manager
+      const managerInstances = [];
+      for (const [id, instance] of this.whatsappManager.instances) {
+        managerInstances.push({
+          id: id,
+          connected: instance.isConnected(),
+          authPath: instance.authPath || instance.authDir || 'N/A',
+          hasClient: !!instance.client,
+          clientState: instance.client ? instance.client.state : 'no client'
+        });
+      }
+      
+      // Verificar token atual
+      const currentToken = await this.database.query(`
+        SELECT t.id, t.name, t.whatsapp_instance_id, i.status, i.name as instance_name
+        FROM api_tokens t 
+        LEFT JOIN whatsapp_instances i ON t.whatsapp_instance_id = i.id
+        WHERE t.id = ?
+      `, [tokenId]);
+      
+      // Verificar se instância do token existe no manager
+      const tokenInstance = instanceId ? this.whatsappManager.getInstance(instanceId) : null;
+      
+      res.json({
+        token_info: {
+          id: tokenId,
+          instance_id: instanceId,
+          token_data: currentToken[0] || null,
+          instance_in_manager: tokenInstance ? {
+            connected: tokenInstance.isConnected(),
+            authPath: tokenInstance.authPath || 'N/A'
+          } : null
+        },
+        database_instances: dbInstances,
+        manager_instances: managerInstances,
+        manager_size: this.whatsappManager.instances.size
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message, stack: error.stack });
     }
   }
 
