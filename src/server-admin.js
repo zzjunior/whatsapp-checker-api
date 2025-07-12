@@ -38,14 +38,20 @@ class WhatsAppCheckerAPI {
   }
 
   setupMiddleware() {
+    // Configurar trust proxy para Railway
+    this.app.set('trust proxy', true);
+    
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
 
-    // Rate limiting
+    // Rate limiting configurado para funcionar com proxy
     const apiLimiter = rateLimit({
       windowMs: 15 * 60 * 1000,
       max: 100,
-      message: { error: 'Muitas requisições' }
+      message: { error: 'Muitas requisições' },
+      standardHeaders: true,
+      legacyHeaders: false,
+      trustProxy: true
     });
 
     this.app.use('/api/', apiLimiter);
@@ -101,9 +107,6 @@ class WhatsAppCheckerAPI {
     this.app.get('/admin', (req, res) => {
       res.sendFile(path.join(__dirname, '../public/login.html'));
     });
-    this.app.get('/admin', (req, res) => {
-      res.send(this.getAdminHTML());
-    });
     
     // Health check endpoint
     this.app.get('/health', async (req, res) => {
@@ -127,6 +130,25 @@ class WhatsAppCheckerAPI {
           timestamp: new Date().toISOString()
         });
       }
+    });
+    
+    // Debug endpoint para Railway
+    this.app.get('/debug', (req, res) => {
+      res.json({
+        headers: req.headers,
+        ip: req.ip,
+        ips: req.ips,
+        protocol: req.protocol,
+        secure: req.secure,
+        originalUrl: req.originalUrl,
+        baseUrl: req.baseUrl,
+        path: req.path,
+        trust_proxy: this.app.get('trust proxy'),
+        env: {
+          NODE_ENV: process.env.NODE_ENV,
+          RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT
+        }
+      });
     });
   }
 

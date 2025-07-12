@@ -158,7 +158,7 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    localStorage.setItem('adminToken', data.token);
+                    localStorage.setItem('admin_token', data.token);
                     localStorage.setItem('userInfo', JSON.stringify(data.user));
                     window.location.href = '/admin/dashboard';
                 } else {

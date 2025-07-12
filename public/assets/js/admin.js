@@ -1,7 +1,7 @@
 class AuthUI {
   constructor() {
     this.user = null;
-    this.token = localStorage.getItem('authToken');
+    this.token = localStorage.getItem('admin_token');
     this.init();
   }
   async init() {
@@ -10,7 +10,7 @@ class AuthUI {
       this.renderHeader();
       this.showDashboard();
     } else {
-      window.location.href = '/login';
+      window.location.href = '/admin';
     }
     this.setupEvents();
   }
@@ -32,7 +32,7 @@ class AuthUI {
       document.getElementById('modalMeusDados').style.display = 'none';
     };
     document.getElementById('btnLogout').onclick = () => {
-      localStorage.removeItem('authToken');
+      localStorage.removeItem('admin_token');
       window.location.reload();
     };
     document.getElementById('formAlterarSenha').onsubmit = async (e) => {
