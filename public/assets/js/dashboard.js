@@ -634,9 +634,10 @@ async function loadTokens() {
             <div class="card mb-3">
                 <div class="card-body">
                     <div class="row align-items-center">
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <h5 class="mb-1">${token.name}</h5>
                             <code class="small text-muted">${token.token}</code>
+                            ${token.instance_name ? `<br><small class="text-primary"><i class="bi bi-whatsapp me-1"></i>${token.instance_name}</small>` : '<br><small class="text-danger">Sem instância</small>'}
                         </div>
                         <div class="col-md-3">
                             <div class="small text-muted">
@@ -645,10 +646,13 @@ async function loadTokens() {
                                 <div>Criado: ${new Date(token.created_at).toLocaleDateString()}</div>
                             </div>
                         </div>
-                        <div class="col-md-3 text-end">
+                        <div class="col-md-4 text-end">
                             <span class="badge bg-${token.active ? 'success' : 'secondary'} me-2">
                                 ${token.active ? 'Ativo' : 'Inativo'}
                             </span>
+                            ${token.instance_status ? `<span class="badge bg-${token.instance_status === 'connected' ? 'success' : 'warning'} me-2">
+                                ${token.instance_status === 'connected' ? 'Online' : 'Offline'}
+                            </span>` : ''}
                             <button class="btn btn-outline-primary btn-sm me-2" onclick="copyToken('${token.token}')">
                                 <i class="bi bi-clipboard"></i>
                             </button>
@@ -677,6 +681,13 @@ async function loadTokens() {
                                     <input type="text" class="form-control" id="tokenName" required>
                                 </div>
                                 <div class="mb-3">
+                                    <label for="tokenInstance" class="form-label">Instância WhatsApp</label>
+                                    <select class="form-select" id="tokenInstance" required>
+                                        <option value="">Selecione uma instância...</option>
+                                    </select>
+                                    <div class="form-text">O token usará esta instância para verificações</div>
+                                </div>
+                                <div class="mb-3">
                                     <label for="tokenLimit" class="form-label">Limite de Requisições</label>
                                     <input type="number" class="form-control" id="tokenLimit" value="1000" min="1">
                                 </div>
@@ -703,13 +714,65 @@ async function loadTokens() {
 }
 
 function showCreateTokenModal() {
+    // Carregar instâncias disponíveis antes de mostrar o modal
+    loadInstancesForToken();
     const modal = new bootstrap.Modal(document.getElementById('createTokenModal'));
     modal.show();
+}
+
+async function loadInstancesForToken() {
+    try {
+        const instances = await apiRequest('/admin/instances');
+        const select = document.getElementById('tokenInstance');
+        
+        // Limpar opções existentes
+        select.innerHTML = '<option value="">Selecione uma instância...</option>';
+        
+        // Adicionar instâncias disponíveis
+        instances.forEach(instance => {
+            const option = document.createElement('option');
+            option.value = instance.id;
+            option.textContent = `${instance.name} (${instance.status === 'connected' ? 'Online' : 'Offline'})`;
+            option.disabled = instance.status !== 'connected';
+            select.appendChild(option);
+        });
+        
+        if (instances.length === 0) {
+            select.innerHTML = '<option value="">Nenhuma instância disponível</option>';
+            
+            // Mostrar alerta sobre necessidade de criar instância
+            const alertHtml = `
+                <div class="alert alert-warning mt-3">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Nenhuma instância WhatsApp disponível!</strong><br>
+                    Você precisa criar e conectar uma instância WhatsApp antes de criar tokens.
+                    <br><br>
+                    <button class="btn btn-sm btn-primary" onclick="createInstanceFirst()">
+                        <i class="bi bi-whatsapp me-1"></i>Criar Instância Primeiro
+                    </button>
+                </div>
+            `;
+            
+            const modalBody = document.querySelector('#createTokenModal .modal-body');
+            if (!modalBody.querySelector('.alert-warning')) {
+                modalBody.insertAdjacentHTML('afterbegin', alertHtml);
+            }
+        } else {
+            // Remover alerta se existir
+            const existingAlert = document.querySelector('#createTokenModal .alert-warning');
+            if (existingAlert) {
+                existingAlert.remove();
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar instâncias:', error);
+    }
 }
 
 async function createToken() {
     try {
         const name = document.getElementById('tokenName').value.trim();
+        const whatsapp_instance_id = document.getElementById('tokenInstance').value;
         const requests_limit = parseInt(document.getElementById('tokenLimit').value);
         
         if (!name) {
@@ -717,10 +780,15 @@ async function createToken() {
             return;
         }
         
-        const response = await apiRequest('/admin/tokens', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, requests_limit })
+        if (!whatsapp_instance_id) {
+            alert('Selecione uma instância WhatsApp');
+            return;
+        }
+        
+        const response = await apiRequest('/admin/tokens', 'POST', {
+            name, 
+            whatsapp_instance_id: parseInt(whatsapp_instance_id),
+            requests_limit
         });
         
         // Fechar modal
@@ -1289,4 +1357,18 @@ function showAlert(message, type = 'info') {
             alerts[alerts.length - 1].remove();
         }
     }, 5000);
+}
+
+function createInstanceFirst() {
+    // Fechar modal de token
+    const tokenModal = bootstrap.Modal.getInstance(document.getElementById('createTokenModal'));
+    tokenModal.hide();
+    
+    // Ir para página de instâncias
+    loadPage('instances');
+    
+    // Mostrar modal de criar instância após um tempo
+    setTimeout(() => {
+        showCreateInstanceModal();
+    }, 500);
 }

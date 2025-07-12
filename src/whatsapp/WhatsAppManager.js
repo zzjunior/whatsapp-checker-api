@@ -174,6 +174,29 @@ class WhatsAppManager {
     return results.length > 0 ? results[0] : null;
   }
 
+  async getInstanceByToken(tokenId) {
+    try {
+      const result = await this.db.query(
+        'SELECT whatsapp_instance_id FROM api_tokens WHERE id = ?',
+        [tokenId]
+      );
+      
+      if (result.length === 0) {
+        return null;
+      }
+      
+      const instanceId = result[0].whatsapp_instance_id;
+      return this.getInstance(instanceId);
+    } catch (error) {
+      console.error('❌ Erro ao buscar instância por token:', error);
+      return null;
+    }
+  }
+  
+  getAllInstances() {
+    return Array.from(this.instances.values());
+  }
+
   // Inicializar todas as instâncias salvas (para uso no startup)
   async initializeAllInstances() {
     try {

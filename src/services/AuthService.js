@@ -66,12 +66,12 @@ class AuthService {
   }
 
   // Criar token API
-  async createApiToken(name, requestsLimit = 1000, expiresAt = null, userId = null) {
+  async createApiToken(name, requestsLimit = 1000, whatsappInstanceId = null, userId = null) {
     try {
       const token = uuidv4();
       const result = await this.db.query(
-        'INSERT INTO api_tokens (token, name, requests_limit, expires_at, user_id) VALUES (?, ?, ?, ?, ?)',
-        [token, name, requestsLimit, expiresAt, userId]
+        'INSERT INTO api_tokens (token, name, requests_limit, whatsapp_instance_id, user_id) VALUES (?, ?, ?, ?, ?)',
+        [token, name, requestsLimit, whatsappInstanceId, userId]
       );
       
       return {
@@ -79,7 +79,7 @@ class AuthService {
         token,
         name,
         requests_limit: requestsLimit,
-        expires_at: expiresAt,
+        whatsapp_instance_id: whatsappInstanceId,
         user_id: userId
       };
     } catch (error) {
@@ -133,15 +133,45 @@ class AuthService {
   async listApiTokens(userId = null) {
     try {
       if (userId) {
-        return await this.db.query(
-          'SELECT id, token, name, requests_limit, requests_used, active, created_at, expires_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC',
-          [userId]
-        );
+        return await this.db.query(`
+          SELECT 
+            t.id, 
+            t.token, 
+            t.name, 
+            t.requests_limit, 
+            t.requests_used, 
+            t.active, 
+            t.created_at, 
+            t.expires_at,
+            t.whatsapp_instance_id,
+            i.name as instance_name,
+            i.status as instance_status
+          FROM api_tokens t
+          LEFT JOIN whatsapp_instances i ON t.whatsapp_instance_id = i.id
+          WHERE t.user_id = ? 
+          ORDER BY t.created_at DESC
+        `, [userId]);
       }
       // Se não especificar userId, lista todos (para admin)
-      return await this.db.query(
-        'SELECT id, token, name, requests_limit, requests_used, active, created_at, expires_at FROM api_tokens ORDER BY created_at DESC'
-      );
+      return await this.db.query(`
+        SELECT 
+          t.id, 
+          t.token, 
+          t.name, 
+          t.requests_limit, 
+          t.requests_used, 
+          t.active, 
+          t.created_at, 
+          t.expires_at,
+          t.whatsapp_instance_id,
+          i.name as instance_name,
+          i.status as instance_status,
+          u.username as user_name
+        FROM api_tokens t
+        LEFT JOIN whatsapp_instances i ON t.whatsapp_instance_id = i.id
+        LEFT JOIN users u ON t.user_id = u.id
+        ORDER BY t.created_at DESC
+      `);
     } catch (error) {
       throw error;
     }

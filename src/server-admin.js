@@ -26,7 +26,7 @@ class WhatsAppCheckerAPI {
     this.authService = new AuthService(this.database);
     this.whatsappChecker = new WhatsAppChecker();
     this.whatsappManager = new WhatsAppManager(this.database);
-    this.verificationService = new VerificationService(this.database, this.whatsappChecker);
+    this.verificationService = new VerificationService(this.database, this.whatsappManager);
     
     // Estado do WhatsApp
     this.whatsappConnected = false;
@@ -188,15 +188,6 @@ class WhatsAppCheckerAPI {
       const { phone, force_check } = req.body;
       if (!phone) return res.status(400).json({ error: 'Número obrigatório' });
 
-      // Verificar se WhatsApp está conectado
-      if (!this.whatsappConnected) {
-        return res.status(503).json({ 
-          error: 'WhatsApp não está conectado', 
-          status: 'disconnected',
-          message: 'Aguarde a reconexão ou verifique o painel admin'
-        });
-      }
-
       const result = await this.verificationService.checkNumber(
         phone, 
         req.apiToken.id, 
@@ -212,10 +203,35 @@ class WhatsAppCheckerAPI {
   }
 
   getWhatsAppStatus(req, res) {
+    // Se tiver token API, verificar status da instância específica
+    if (req.apiToken && req.apiToken.id) {
+      try {
+        const instance = this.whatsappManager.getInstanceByToken(req.apiToken.id);
+        if (instance) {
+          const connected = instance.isConnected();
+          return res.json({
+            connected,
+            status: connected ? 'online' : 'offline',
+            message: connected ? 'WhatsApp conectado' : 'WhatsApp desconectado',
+            instance_id: instance.id
+          });
+        }
+      } catch (error) {
+        console.error('Erro ao verificar status da instância:', error);
+      }
+    }
+
+    // Status geral (para admin ou caso não tenha token específico)
+    const instances = this.whatsappManager.getAllInstances();
+    const connectedInstances = instances.filter(i => i.isConnected()).length;
+    const totalInstances = instances.length;
+
     res.json({
-      connected: this.whatsappConnected,
-      status: this.whatsappConnected ? 'online' : 'offline',
-      message: this.whatsappConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado'
+      connected: connectedInstances > 0,
+      status: connectedInstances > 0 ? 'online' : 'offline',
+      message: `${connectedInstances}/${totalInstances} instâncias conectadas`,
+      total_instances: totalInstances,
+      connected_instances: connectedInstances
     });
   }
 
@@ -261,8 +277,20 @@ class WhatsAppCheckerAPI {
 
   async createToken(req, res) {
     try {
-      const { name, requests_limit = 1000 } = req.body;
-      const token = await this.authService.createApiToken(name, requests_limit, null, req.user.id);
+      const { name, requests_limit = 1000, whatsapp_instance_id } = req.body;
+      
+      // Verificar se a instância pertence ao usuário
+      if (whatsapp_instance_id) {
+        const instances = await this.database.query(
+          'SELECT id FROM whatsapp_instances WHERE id = ? AND user_id = ?',
+          [whatsapp_instance_id, req.user.id]
+        );
+        if (instances.length === 0) {
+          return res.status(400).json({ error: 'Instância não encontrada ou não pertence ao usuário' });
+        }
+      }
+      
+      const token = await this.authService.createApiToken(name, requests_limit, whatsapp_instance_id, req.user.id);
       res.json(token);
     } catch (error) {
       res.status(500).json({ error: error.message });

@@ -1,7 +1,7 @@
 class VerificationService {
-  constructor(database, whatsappChecker) {
+  constructor(database, whatsappManager) {
     this.db = database;
-    this.whatsapp = whatsappChecker;
+    this.whatsappManager = whatsappManager;
     this.cacheExpiration = 24 * 60 * 60 * 1000; // 24 horas em ms
   }
 
@@ -13,6 +13,22 @@ class VerificationService {
       
       if (cleanNumber.length < 10 || cleanNumber.length > 15) {
         throw new Error('Número inválido');
+      }
+
+      // Buscar informações do token para identificar a instância
+      let instanceId = null;
+      if (tokenId) {
+        const tokenInfo = await this.db.query(
+          'SELECT whatsapp_instance_id FROM api_tokens WHERE id = ?',
+          [tokenId]
+        );
+        if (tokenInfo.length > 0) {
+          instanceId = tokenInfo[0].whatsapp_instance_id;
+        }
+      }
+
+      if (!instanceId) {
+        throw new Error('Token não possui instância WhatsApp associada');
       }
 
       // Verificar no cache primeiro (apenas se não for forçado)
@@ -31,15 +47,16 @@ class VerificationService {
         }
       }
 
-      // Verificar se WhatsApp está conectado
-      if (!this.whatsapp || !this.whatsapp.isConnected()) {
-        throw new Error('WhatsApp não está conectado. Tente novamente em alguns minutos.');
+      // Verificar se a instância está conectada
+      const instance = this.whatsappManager.getInstance(instanceId);
+      if (!instance || !instance.isConnected()) {
+        throw new Error('Instância WhatsApp não está conectada. Tente novamente em alguns minutos.');
       }
 
       // Se não estiver no cache ou for forçado, verificar via WhatsApp
       let result;
       try {
-        result = await this.whatsapp.checkNumber(cleanNumber);
+        result = await instance.checkNumber(cleanNumber);
       } catch (error) {
         console.error('Erro ao verificar no WhatsApp:', error);
         throw new Error('Erro ao verificar número no WhatsApp. Tente novamente.');
