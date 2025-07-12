@@ -74,10 +74,18 @@ class WhatsAppManager {
   }
 
   async getInstance(instanceId) {
+    console.log(`🔍 getInstance chamado para instância ${instanceId}`);
+    
     if (this.instances.has(instanceId)) {
-      return this.instances.get(instanceId);
+      const instance = this.instances.get(instanceId);
+      console.log(`✅ Instância ${instanceId} encontrada na memória`);
+      console.log(`📱 Tipo da instância: ${typeof instance}`);
+      console.log(`📱 Tem método isConnected: ${typeof instance.isConnected}`);
+      return instance;
     }
 
+    console.log(`🔍 Instância ${instanceId} não está na memória, carregando do banco...`);
+    
     // Carregar do banco se não estiver em memória
     const results = await this.db.query(
       'SELECT * FROM whatsapp_instances WHERE id = ?',
@@ -85,14 +93,18 @@ class WhatsAppManager {
     );
 
     if (results.length === 0) {
+      console.log(`❌ Instância ${instanceId} não encontrada no banco`);
       throw new Error('Instância não encontrada');
     }
 
     const instance = results[0];
+    console.log(`📱 Criando nova instância WhatsApp para ${instanceId} com auth_path: ${instance.auth_path}`);
+    
     const checker = new WhatsAppChecker(instance.auth_path);
     this.instances.set(instanceId, checker);
     this.setupInstanceEvents(instanceId, checker);
 
+    console.log(`✅ Instância ${instanceId} criada e adicionada à memória`);
     return checker;
   }
 

@@ -53,7 +53,7 @@ class VerificationService {
 
       // Verificar se a instância está conectada
       console.log(`🔍 Buscando instância ${instanceId}...`);
-      const instance = this.whatsappManager.getInstance(instanceId);
+      const instance = await this.whatsappManager.getInstance(instanceId);
       if (!instance) {
         console.log(`❌ Instância ${instanceId} não encontrada no manager`);
         throw new Error('Instância WhatsApp não encontrada. Verifique se ela foi criada corretamente.');
