@@ -66,12 +66,12 @@ class AuthService {
   }
 
   // Criar token API
-  async createApiToken(name, requestsLimit = 1000, expiresAt = null) {
+  async createApiToken(name, requestsLimit = 1000, expiresAt = null, userId = null) {
     try {
       const token = uuidv4();
       const result = await this.db.query(
-        'INSERT INTO api_tokens (token, name, requests_limit, expires_at) VALUES (?, ?, ?, ?)',
-        [token, name, requestsLimit, expiresAt]
+        'INSERT INTO api_tokens (token, name, requests_limit, expires_at, user_id) VALUES (?, ?, ?, ?, ?)',
+        [token, name, requestsLimit, expiresAt, userId]
       );
       
       return {
@@ -79,7 +79,8 @@ class AuthService {
         token,
         name,
         requests_limit: requestsLimit,
-        expires_at: expiresAt
+        expires_at: expiresAt,
+        user_id: userId
       };
     } catch (error) {
       throw error;
@@ -129,8 +130,15 @@ class AuthService {
   }
 
   // Listar tokens API
-  async listApiTokens() {
+  async listApiTokens(userId = null) {
     try {
+      if (userId) {
+        return await this.db.query(
+          'SELECT id, token, name, requests_limit, requests_used, active, created_at, expires_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC',
+          [userId]
+        );
+      }
+      // Se não especificar userId, lista todos (para admin)
       return await this.db.query(
         'SELECT id, token, name, requests_limit, requests_used, active, created_at, expires_at FROM api_tokens ORDER BY created_at DESC'
       );

@@ -91,11 +91,13 @@ class WhatsAppCheckerAPI {
     // Tokens
     this.app.post('/admin/tokens', this.middlewareAdminAuth.bind(this), this.createToken.bind(this));
     this.app.get('/admin/tokens', this.middlewareAdminAuth.bind(this), this.listTokens.bind(this));
+    this.app.delete('/admin/tokens/:id', this.middlewareAdminAuth.bind(this), this.deleteToken.bind(this));
     
     // User management
     this.app.post('/admin/change-password', this.middlewareAdminAuth.bind(this), this.changePassword.bind(this));
     this.app.post('/admin/users', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.addUser.bind(this));
     this.app.get('/admin/users', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.listUsers.bind(this));
+    this.app.put('/admin/users/:id', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.updateUser.bind(this));
     this.app.delete('/admin/users/:id', this.middlewareAdminAuth.bind(this), this.onlyAdmin.bind(this), this.deleteUser.bind(this));
 
     // Static files and pages
@@ -256,7 +258,7 @@ class WhatsAppCheckerAPI {
   async createToken(req, res) {
     try {
       const { name, requests_limit = 1000 } = req.body;
-      const token = await this.authService.createApiToken(name, requests_limit);
+      const token = await this.authService.createApiToken(name, requests_limit, null, req.user.id);
       res.json(token);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -265,9 +267,28 @@ class WhatsAppCheckerAPI {
 
   async listTokens(req, res) {
     try {
-      const tokens = await this.authService.listApiTokens();
+      const tokens = await this.authService.listApiTokens(req.user.id);
       res.json(tokens);
     } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async deleteToken(req, res) {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ error: 'ID obrigatório' });
+      
+      // Verificar se o token pertence ao usuário
+      const tokens = await this.database.query('SELECT * FROM api_tokens WHERE id = ? AND user_id = ?', [id, req.user.id]);
+      if (tokens.length === 0) {
+        return res.status(404).json({ error: 'Token não encontrado' });
+      }
+      
+      await this.database.query('DELETE FROM api_tokens WHERE id = ?', [id]);
+      res.json({ message: 'Token excluído com sucesso' });
+    } catch (error) {
+      console.error('❌ Erro ao excluir token:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -334,6 +355,39 @@ class WhatsAppCheckerAPI {
       res.json({ message: 'Usuário excluído com sucesso' });
     } catch (error) {
       console.error('❌ Erro ao excluir usuário:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async updateUser(req, res) {
+    try {
+      const { id } = req.params;
+      const { username, user_type, password } = req.body;
+      
+      if (!id) return res.status(400).json({ error: 'ID obrigatório' });
+      if (!username || !user_type) return res.status(400).json({ error: 'Username e tipo são obrigatórios' });
+      
+      const role = user_type === 'admin' ? 'admin' : 'common';
+      
+      if (password && password.trim() !== '') {
+        // Se senha foi fornecida, atualizar com senha
+        const bcrypt = require('bcryptjs');
+        const hashed = await bcrypt.hash(password, 12);
+        await this.database.query(
+          'UPDATE users SET username = ?, role = ?, password = ? WHERE id = ?',
+          [username, role, hashed, id]
+        );
+      } else {
+        // Se senha não foi fornecida, atualizar apenas username e role
+        await this.database.query(
+          'UPDATE users SET username = ?, role = ? WHERE id = ?',
+          [username, role, id]
+        );
+      }
+      
+      res.json({ message: 'Usuário atualizado com sucesso' });
+    } catch (error) {
+      console.error('❌ Erro ao atualizar usuário:', error);
       res.status(500).json({ error: error.message });
     }
   }

@@ -494,11 +494,11 @@ async function deleteInstance(id) {
     }
 }
 
-function loadTokens() {
+async function loadTokens() {
     document.getElementById('pageContent').innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h4>Seus Tokens API</h4>
-            <button class="btn btn-primary" onclick="createToken()">
+            <button class="btn btn-primary" onclick="showCreateTokenModal()">
                 <i class="bi bi-plus-lg me-2"></i>Novo Token
             </button>
         </div>
@@ -516,12 +516,174 @@ function loadTokens() {
             </div>
         </div>
     `;
+
+    try {
+        const tokens = await apiRequest('/admin/tokens');
+        
+        const tokensList = document.getElementById('tokensList');
+        
+        if (tokens.length === 0) {
+            tokensList.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="bi bi-key fs-1 text-muted"></i>
+                    <h5 class="mt-3">Nenhum token criado</h5>
+                    <p class="text-muted">Clique em "Novo Token" para começar</p>
+                </div>
+            `;
+            return;
+        }
+
+        tokensList.innerHTML = tokens.map(token => `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h5 class="mb-1">${token.name}</h5>
+                            <code class="small text-muted">${token.token}</code>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="small text-muted">
+                                <div>Limite: ${token.requests_limit}</div>
+                                <div>Usado: ${token.requests_used || 0}</div>
+                                <div>Criado: ${new Date(token.created_at).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <span class="badge bg-${token.active ? 'success' : 'secondary'} me-2">
+                                ${token.active ? 'Ativo' : 'Inativo'}
+                            </span>
+                            <button class="btn btn-outline-primary btn-sm me-2" onclick="copyToken('${token.token}')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="deleteToken(${token.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        // Adicionar modal para criar token
+        tokensList.insertAdjacentHTML('beforeend', `
+            <div class="modal fade" id="createTokenModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Novo Token API</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="createTokenForm">
+                                <div class="mb-3">
+                                    <label for="tokenName" class="form-label">Nome do Token</label>
+                                    <input type="text" class="form-control" id="tokenName" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="tokenLimit" class="form-label">Limite de Requisições</label>
+                                    <input type="number" class="form-control" id="tokenLimit" value="1000" min="1">
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" onclick="createToken()">Criar Token</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+    } catch (error) {
+        console.error('Erro ao carregar tokens:', error);
+        document.getElementById('tokensList').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Erro ao carregar tokens: ${error.message}
+            </div>
+        `;
+    }
 }
 
-function createToken() {
-    const name = prompt('Nome do token:');
-    if (name) {
-        console.log('Criar token:', name);
+function showCreateTokenModal() {
+    const modal = new bootstrap.Modal(document.getElementById('createTokenModal'));
+    modal.show();
+}
+
+async function createToken() {
+    try {
+        const name = document.getElementById('tokenName').value.trim();
+        const requests_limit = parseInt(document.getElementById('tokenLimit').value);
+        
+        if (!name) {
+            alert('Nome do token é obrigatório');
+            return;
+        }
+        
+        const response = await apiRequest('/admin/tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, requests_limit })
+        });
+        
+        // Fechar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('createTokenModal'));
+        modal.hide();
+        
+        // Limpar formulário
+        document.getElementById('createTokenForm').reset();
+        
+        // Recarregar lista
+        loadTokens();
+        
+        // Mostrar o token criado
+        showTokenCreated(response.token);
+        
+    } catch (error) {
+        console.error('Erro ao criar token:', error);
+        alert('Erro ao criar token: ' + error.message);
+    }
+}
+
+function showTokenCreated(token) {
+    const alertHtml = `
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <h5 class="alert-heading">Token criado com sucesso!</h5>
+            <p>Seu novo token API:</p>
+            <code class="user-select-all">${token}</code>
+            <hr>
+            <p class="mb-0">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Importante:</strong> Copie este token agora. Você não poderá vê-lo novamente.
+            </p>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    document.getElementById('pageContent').insertAdjacentHTML('afterbegin', alertHtml);
+}
+
+function copyToken(token) {
+    navigator.clipboard.writeText(token).then(() => {
+        showSuccess('Token copiado para a área de transferência');
+    }).catch(err => {
+        console.error('Erro ao copiar token:', err);
+        alert('Erro ao copiar token');
+    });
+}
+
+async function deleteToken(tokenId) {
+    if (!confirm('Tem certeza que deseja excluir este token?')) {
+        return;
+    }
+    
+    try {
+        await apiRequest(`/admin/tokens/${tokenId}`, { method: 'DELETE' });
+        loadTokens();
+        showSuccess('Token excluído com sucesso');
+    } catch (error) {
+        console.error('Erro ao excluir token:', error);
+        alert('Erro ao excluir token: ' + error.message);
     }
 }
 
@@ -588,10 +750,16 @@ async function loadUsers() {
                                         </td>
                                         <td>
                                             ${user.id !== currentUser.id ? `
+                                                <button class="btn btn-primary btn-sm me-2" onclick="editUser(${user.id}, '${user.username}', '${user.user_type}')">
+                                                    <i class="bi bi-pencil"></i> Editar
+                                                </button>
                                                 <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id}, '${user.username}')">
                                                     <i class="bi bi-trash"></i> Excluir
                                                 </button>
                                             ` : `
+                                                <button class="btn btn-outline-primary btn-sm me-2" onclick="changeOwnPassword()">
+                                                    <i class="bi bi-key"></i> Alterar Senha
+                                                </button>
                                                 <span class="text-muted">Você</span>
                                             `}
                                         </td>
@@ -633,6 +801,74 @@ async function loadUsers() {
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                             <button type="button" class="btn btn-primary" onclick="createUser()">Criar Usuário</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modal para editar usuário -->
+            <div class="modal fade" id="editUserModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Editar Usuário</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="editUserForm">
+                                <input type="hidden" id="editUserId">
+                                <div class="mb-3">
+                                    <label for="editUsername" class="form-label">Nome de Usuário</label>
+                                    <input type="text" class="form-control" id="editUsername" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editPassword" class="form-label">Nova Senha (deixe vazio para não alterar)</label>
+                                    <input type="password" class="form-control" id="editPassword">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editUserType" class="form-label">Tipo de Usuário</label>
+                                    <select class="form-select" id="editUserType" required>
+                                        <option value="common">Comum</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" onclick="updateUser()">Atualizar Usuário</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modal para mudança de senha -->
+            <div class="modal fade" id="changePasswordModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Alterar Senha</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="changePasswordForm">
+                                <div class="mb-3">
+                                    <label for="currentPassword" class="form-label">Senha Atual</label>
+                                    <input type="password" class="form-control" id="currentPassword" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newPasswordChange" class="form-label">Nova Senha</label>
+                                    <input type="password" class="form-control" id="newPasswordChange" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="confirmPassword" class="form-label">Confirmar Nova Senha</label>
+                                    <input type="password" class="form-control" id="confirmPassword" required>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" onclick="changePassword()">Alterar Senha</button>
                         </div>
                     </div>
                 </div>
@@ -702,18 +938,104 @@ async function createUser() {
     }
 }
 
-async function deleteUser(userId, username) {
-    if (!confirm(`Tem certeza que deseja excluir o usuário "${username}"?`)) {
-        return;
-    }
+function editUser(userId, username, userType) {
+    document.getElementById('editUserId').value = userId;
+    document.getElementById('editUsername').value = username;
+    document.getElementById('editUserType').value = userType;
+    document.getElementById('editPassword').value = '';
     
+    const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+    modal.show();
+}
+
+async function updateUser() {
     try {
-        await apiRequest(`/admin/users/${userId}`, { method: 'DELETE' });
+        const userId = document.getElementById('editUserId').value;
+        const username = document.getElementById('editUsername').value.trim();
+        const password = document.getElementById('editPassword').value;
+        const user_type = document.getElementById('editUserType').value;
+        
+        if (!username) {
+            alert('Nome de usuário é obrigatório');
+            return;
+        }
+        
+        const payload = { username, user_type };
+        if (password.trim() !== '') {
+            payload.password = password;
+        }
+        
+        await apiRequest(`/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        // Fechar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
+        modal.hide();
+        
+        // Limpar formulário
+        document.getElementById('editUserForm').reset();
+        
+        // Recarregar lista
         loadUsers();
-        showSuccess('Usuário excluído com sucesso');
+        
+        showSuccess('Usuário atualizado com sucesso');
+        
     } catch (error) {
-        console.error('Erro ao excluir usuário:', error);
-        alert('Erro ao excluir usuário: ' + error.message);
+        console.error('Erro ao atualizar usuário:', error);
+        alert('Erro ao atualizar usuário: ' + error.message);
+    }
+}
+
+function changeOwnPassword() {
+    const modal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
+    modal.show();
+}
+
+async function changePassword() {
+    try {
+        const currentPassword = document.getElementById('currentPassword').value;
+        const newPassword = document.getElementById('newPasswordChange').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            alert('Todos os campos são obrigatórios');
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            alert('Nova senha e confirmação não coincidem');
+            return;
+        }
+        
+        if (newPassword.length < 6) {
+            alert('Nova senha deve ter pelo menos 6 caracteres');
+            return;
+        }
+        
+        await apiRequest('/admin/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                currentPassword: currentPassword,
+                newPassword: newPassword 
+            })
+        });
+        
+        // Fechar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('changePasswordModal'));
+        modal.hide();
+        
+        // Limpar formulário
+        document.getElementById('changePasswordForm').reset();
+        
+        showSuccess('Senha alterada com sucesso');
+        
+    } catch (error) {
+        console.error('Erro ao alterar senha:', error);
+        alert('Erro ao alterar senha: ' + error.message);
     }
 }
 
