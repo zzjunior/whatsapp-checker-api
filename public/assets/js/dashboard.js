@@ -110,16 +110,24 @@ async function apiRequest(endpoint, method = 'GET', data = null) {
 
 async function checkWhatsAppStatus() {
     try {
-        const response = await apiRequest('/api/status');
-        const data = response;
+        // Buscar status específico do usuário baseado em suas instâncias
+        const instances = await apiRequest('/admin/instances');
+        
+        // Verificar se há instâncias conectadas
+        const connectedInstances = instances.filter(i => i.status === 'connected').length;
+        const totalInstances = instances.length;
         
         const statusElement = document.getElementById('whatsappStatus');
-        if (data.connected) {
+        
+        if (connectedInstances > 0) {
             statusElement.className = 'badge bg-success status-badge me-3';
-            statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>WhatsApp: Online';
+            statusElement.innerHTML = `<i class="bi bi-circle-fill me-1"></i>WhatsApp: ${connectedInstances}/${totalInstances} Online`;
+        } else if (totalInstances > 0) {
+            statusElement.className = 'badge bg-warning status-badge me-3';
+            statusElement.innerHTML = `<i class="bi bi-circle-fill me-1"></i>WhatsApp: ${totalInstances} Offline`;
         } else {
-            statusElement.className = 'badge bg-danger status-badge me-3';
-            statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>WhatsApp: Offline';
+            statusElement.className = 'badge bg-secondary status-badge me-3';
+            statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>WhatsApp: Sem instâncias';
         }
     } catch (error) {
         console.error('Erro ao verificar status:', error);
@@ -671,42 +679,8 @@ async function loadTokens() {
             </div>
         `).join('');
 
-        // Adicionar modal para criar token
-        tokensList.insertAdjacentHTML('beforeend', `
-            <div class="modal fade" id="createTokenModal" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Novo Token API</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form id="createTokenForm">
-                                <div class="mb-3">
-                                    <label for="tokenName" class="form-label">Nome do Token</label>
-                                    <input type="text" class="form-control" id="tokenName" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="tokenInstance" class="form-label">Instância WhatsApp</label>
-                                    <select class="form-select" id="tokenInstance" required>
-                                        <option value="">Selecione uma instância...</option>
-                                    </select>
-                                    <div class="form-text">O token usará esta instância para verificações</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="tokenLimit" class="form-label">Limite de Requisições</label>
-                                    <input type="number" class="form-control" id="tokenLimit" value="1000" min="1">
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="button" class="btn btn-primary" onclick="createToken()">Criar Token</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `);
+        // Garantir que o modal existe e configurar eventos
+        setupTokenModal();
         
     } catch (error) {
         console.error('Erro ao carregar tokens:', error);
@@ -717,6 +691,61 @@ async function loadTokens() {
             </div>
         `;
     }
+}
+
+function setupTokenModal() {
+    // Verificar se o modal já existe
+    if (document.getElementById('createTokenModal')) {
+        return;
+    }
+    
+    // Criar modal uma única vez
+    const modalHtml = `
+        <div class="modal fade" id="createTokenModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Novo Token API</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="createTokenForm">
+                            <div class="mb-3">
+                                <label for="tokenName" class="form-label">Nome do Token</label>
+                                <input type="text" class="form-control" id="tokenName" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="tokenInstance" class="form-label">Instância WhatsApp</label>
+                                <select class="form-select" id="tokenInstance" required>
+                                    <option value="">Selecione uma instância...</option>
+                                </select>
+                                <div class="form-text">O token usará esta instância para verificações</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="tokenLimit" class="form-label">Limite de Requisições</label>
+                                <input type="number" class="form-control" id="tokenLimit" value="1000" min="1">
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" id="createTokenBtn">Criar Token</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Configurar evento do botão criar
+    document.getElementById('createTokenBtn').addEventListener('click', createToken);
+    
+    // Configurar evento de submit do formulário
+    document.getElementById('createTokenForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        createToken();
+    });
 }
 
 function showCreateTokenModal() {
@@ -849,7 +878,7 @@ async function deleteToken(tokenId) {
     }
     
     try {
-        await apiRequest(`/admin/tokens/${tokenId}`, { method: 'DELETE' });
+        await apiRequest(`/admin/tokens/${tokenId}`, 'DELETE');
         loadTokens();
         showSuccess('Token excluído com sucesso');
     } catch (error) {
@@ -1085,11 +1114,7 @@ async function createUser() {
             return;
         }
         
-        await apiRequest('/admin/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, user_type })
-        });
+        await apiRequest('/admin/users', 'POST', { username, password, user_type });
         
         // Fechar modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('createUserModal'));
@@ -1136,11 +1161,7 @@ async function updateUser() {
             payload.password = password;
         }
         
-        await apiRequest(`/admin/users/${userId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        await apiRequest(`/admin/users/${userId}`, 'PUT', payload);
         
         // Fechar modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
@@ -1334,6 +1355,25 @@ function showQRCode(instanceId, qrData) {
         colorLight: "#ffffff",
         correctLevel: QRCode.CorrectLevel.M
     });
+}
+
+async function deleteUser(userId, username) {
+    if (!confirm(`Tem certeza que deseja excluir o usuário "${username}"?`)) {
+        return;
+    }
+    
+    try {
+        await apiRequest(`/admin/users/${userId}`, 'DELETE');
+        loadUsers();
+        showSuccess('Usuário excluído com sucesso');
+    } catch (error) {
+        console.error('Erro ao excluir usuário:', error);
+        alert('Erro ao excluir usuário: ' + error.message);
+    }
+}
+
+function showSuccess(message) {
+    showAlert(message, 'success');
 }
 
 function hideQRModal() {

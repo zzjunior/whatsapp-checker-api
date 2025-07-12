@@ -17,6 +17,12 @@ ecosystem.config.js
 auth-backup-*
 backup-auth-*
 
+# Arquivos de teste e debug
+test-*.js
+test-*.sql
+debug-*.sql
+migration-*.sql
+
 # Logs do PM2
 logs/
 
@@ -24,5 +30,14 @@ logs/
 *.tmp
 *.temp
 
-# Arquivos de migração SQL (manter apenas no dev)
-migration-*.sql
+# Arquivos de teste (não subir em produção)
+test-*.js
+test-*.sql
+debug-*.sql
+*-test.js
+*-debug.js
+*.test.js
+*.spec.js
+test/
+tests/
+__tests__/

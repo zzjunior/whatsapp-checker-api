@@ -104,11 +104,37 @@ class WhatsAppManager {
     
     // Log para debug
     console.log(`📱 Instâncias encontradas para usuário ${userId}:`, results.length);
-    results.forEach(instance => {
+    
+    // Atualizar status real das instâncias
+    const instancesWithRealStatus = results.map(instance => {
+      const realStatus = this.getRealInstanceStatus(instance.id);
+      
+      // Se o status real for diferente do banco, atualizar
+      if (realStatus !== instance.status) {
+        this.updateInstanceStatus(instance.id, realStatus);
+        instance.status = realStatus;
+      }
+      
       console.log(`  - ID: ${instance.id}, Nome: ${instance.name}, Status: ${instance.status}`);
+      return instance;
     });
     
-    return results;
+    return instancesWithRealStatus;
+  }
+
+  // Método para obter status real da instância
+  getRealInstanceStatus(instanceId) {
+    if (this.instances.has(instanceId)) {
+      const checker = this.instances.get(instanceId);
+      if (checker.isConnected()) {
+        return 'connected';
+      } else if (checker.isConnecting) {
+        return 'connecting';
+      } else {
+        return 'disconnected';
+      }
+    }
+    return 'disconnected';
   }
 
   async deleteInstance(instanceId, userId) {
@@ -123,21 +149,34 @@ class WhatsAppManager {
         throw new Error('Instância não encontrada ou não autorizada');
       }
 
-      // Desconectar se estiver ativo
+      console.log(`🗑️ Removendo instância ${instanceId}...`);
+
+      // Desconectar e parar tentativas de reconexão se estiver ativo
       if (this.instances.has(instanceId)) {
         const checker = this.instances.get(instanceId);
-        checker.disconnect();
+        console.log(`🛑 Parando instância ${instanceId}...`);
+        
+        // Parar tentativas de reconexão
+        checker.stopReconnecting();
+        
+        // Desconectar
+        await checker.disconnect();
+        
+        // Remover do mapa
         this.instances.delete(instanceId);
+        console.log(`✅ Instância ${instanceId} removida do manager`);
       }
 
       // Remover do banco
       await this.db.query('DELETE FROM whatsapp_instances WHERE id = ?', [instanceId]);
+      console.log(`✅ Instância ${instanceId} removida do banco`);
 
       // Remover pasta de autenticação
       const fs = require('fs');
       const authPath = path.join(__dirname, '../../', results[0].auth_path);
       if (fs.existsSync(authPath)) {
         fs.rmSync(authPath, { recursive: true, force: true });
+        console.log(`✅ Pasta de auth removida: ${authPath}`);
       }
 
       return true;
@@ -205,8 +244,13 @@ class WhatsAppManager {
   async disconnectInstance(instanceId) {
     if (this.instances.has(instanceId)) {
       const checker = this.instances.get(instanceId);
-      checker.disconnect();
+      console.log(`🛑 Desconectando instância ${instanceId}...`);
+      await checker.disconnect();
       await this.updateInstanceStatus(instanceId, 'disconnected');
+      
+      // Remover da memória para parar completamente
+      this.instances.delete(instanceId);
+      console.log(`🛑 Instância ${instanceId} removida da memória`);
     }
   }
 
@@ -226,12 +270,20 @@ class WhatsAppManager {
         [tokenId]
       );
       
-      if (result.length === 0) {
+      if (result.length === 0 || !result[0].whatsapp_instance_id) {
         return null;
       }
       
       const instanceId = result[0].whatsapp_instance_id;
-      return this.getInstance(instanceId);
+      const checker = await this.getInstance(instanceId);
+      
+      // Retornar objeto com checker e id da instância
+      return {
+        ...checker,
+        id: instanceId,
+        isConnected: () => checker.isConnected(),
+        getConnectionStatus: () => checker.getConnectionStatus()
+      };
     } catch (error) {
       console.error('❌ Erro ao buscar instância por token:', error);
       return null;

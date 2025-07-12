@@ -28,7 +28,7 @@ class WhatsAppCheckerAPI {
     this.whatsappManager = new WhatsAppManager(this.database);
     this.verificationService = new VerificationService(this.database, this.whatsappManager);
     
-    // Estado do WhatsApp
+    // Estado do WhatsApp (mantido para compatibilidade com admin-panel.js antigo)
     this.whatsappConnected = false;
     this.currentQRCode = null;
     
@@ -71,7 +71,7 @@ class WhatsAppCheckerAPI {
         message: 'WhatsApp Checker API',
         version: '1.0.0',
         status: 'online',
-        whatsapp_connected: this.whatsappConnected
+        whatsapp_connected: false // Deprecated - use /api/status for real status
       });
     });
 
@@ -126,7 +126,7 @@ class WhatsAppCheckerAPI {
           memory: process.memoryUsage(),
           instances: stats,
           database: dbStatus.length > 0 ? 'connected' : 'disconnected',
-          whatsapp_legacy: this.whatsappConnected
+          whatsapp_legacy: false // Deprecated - use instances array for real status
         });
       } catch (error) {
         res.status(503).json({
@@ -228,26 +228,54 @@ class WhatsAppCheckerAPI {
             connected,
             status: connected ? 'online' : 'offline',
             message: connected ? 'WhatsApp conectado' : 'WhatsApp desconectado',
-            instance_id: instance.id
+            instance_id: instance.id,
+            mode: 'token_specific'
+          });
+        } else {
+          return res.json({
+            connected: false,
+            status: 'offline',
+            message: 'Token não possui instância associada ou instância não encontrada',
+            instance_id: null,
+            mode: 'token_specific'
           });
         }
       } catch (error) {
         console.error('Erro ao verificar status da instância:', error);
+        return res.json({
+          connected: false,
+          status: 'error',
+          message: 'Erro ao verificar status da instância: ' + error.message,
+          instance_id: null,
+          mode: 'token_specific'
+        });
       }
     }
 
-    // Status geral (para admin ou caso não tenha token específico)
-    const instances = this.whatsappManager.getAllInstances();
-    const connectedInstances = instances.filter(i => i.isConnected()).length;
-    const totalInstances = instances.length;
+    // Status geral (para casos sem token ou admin)
+    try {
+      const instances = this.whatsappManager.getAllInstances();
+      const connectedInstances = instances.filter(i => i.isConnected()).length;
+      const totalInstances = instances.length;
 
-    res.json({
-      connected: connectedInstances > 0,
-      status: connectedInstances > 0 ? 'online' : 'offline',
-      message: `${connectedInstances}/${totalInstances} instâncias conectadas`,
-      total_instances: totalInstances,
-      connected_instances: connectedInstances
-    });
+      res.json({
+        connected: connectedInstances > 0,
+        status: connectedInstances > 0 ? 'online' : 'offline',
+        message: `${connectedInstances}/${totalInstances} instâncias conectadas`,
+        total_instances: totalInstances,
+        connected_instances: connectedInstances,
+        mode: 'general'
+      });
+    } catch (error) {
+      res.json({
+        connected: false,
+        status: 'error',
+        message: 'Erro ao verificar status geral: ' + error.message,
+        total_instances: 0,
+        connected_instances: 0,
+        mode: 'general'
+      });
+    }
   }
 
   async adminLogin(req, res) {
@@ -262,12 +290,21 @@ class WhatsAppCheckerAPI {
 
   async getAdminStatus(req, res) {
     try {
-      // Garante que user_type, whatsapp_connected e username sempre sejam retornados
+      // Verificar status das instâncias do usuário
+      const userInstances = await this.whatsappManager.getUserInstances(req.user.id);
+      const connectedInstances = userInstances.filter(i => i.status === 'connected').length;
+      const hasConnectedInstances = connectedInstances > 0;
+      
       res.json({
-        whatsapp_connected: this.whatsappConnected,
-        current_qr: this.currentQRCode,
-        user_type: req.user?.role || 'common', // fallback para common
-        username: req.user?.username || null
+        whatsapp_connected: hasConnectedInstances,
+        current_qr: this.currentQRCode, // Manter por compatibilidade
+        user_type: req.user?.role || 'common',
+        username: req.user?.username || null,
+        instances_status: {
+          total: userInstances.length,
+          connected: connectedInstances,
+          disconnected: userInstances.length - connectedInstances
+        }
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -276,18 +313,30 @@ class WhatsAppCheckerAPI {
 
   async connectWhatsApp(req, res) {
     try {
-      await this.whatsappChecker.connect();
-      res.json({ message: 'Conectando...' });
+      // Este endpoint é mantido para compatibilidade com admin-panel.js antigo
+      // Para novos projetos, use o endpoint /admin/instances/connect
+      res.json({ 
+        message: 'Este endpoint está obsoleto. Use /admin/instances/connect para conectar instâncias específicas.',
+        deprecated: true 
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   }
 
   async getQRCode(req, res) {
-    res.json({ 
-      qr_code: this.currentQRCode,
-      connected: this.whatsappConnected 
-    });
+    try {
+      // Este endpoint é mantido para compatibilidade com admin-panel.js antigo
+      // Para novos projetos, use o endpoint /admin/instances/{id}/qr
+      res.json({ 
+        qr_code: null,
+        connected: false,
+        message: 'Este endpoint está obsoleto. Use /admin/instances/{id}/qr para obter QR de instâncias específicas.',
+        deprecated: true 
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   }
 
   async createToken(req, res) {
@@ -470,29 +519,30 @@ class WhatsAppCheckerAPI {
         console.log('👤 Admin existe');
       }
 
-      // WhatsApp events
+      // WhatsApp events (mantido para compatibilidade com admin-panel.js antigo)
       this.whatsappChecker.on('qr', (qr) => {
         this.currentQRCode = qr;
-        console.log('📱 QR disponível');
+        console.log('📱 QR disponível (legado)');
       });
 
       this.whatsappChecker.on('ready', () => {
         this.whatsappConnected = true;
-        console.log('✅ WhatsApp OK');
+        console.log('✅ WhatsApp OK (legado)');
       });
 
       this.whatsappChecker.on('disconnected', () => {
         this.whatsappConnected = false;
-        console.log('❌ WhatsApp OFF');
+        console.log('❌ WhatsApp OFF (legado)');
       });
 
       this.whatsappChecker.on('max_reconnect_attempts', () => {
         console.log('❌ Máximo de tentativas de reconexão atingido. Aguardando nova tentativa...');
-        // Aguardar 5 minutos antes de tentar novamente
+        // Aguardar 5 minutos antes de tentar novamente (código legado)
         setTimeout(() => {
-          console.log('🔄 Reiniciando tentativas de conexão...');
+          console.log('🔄 Reiniciando tentativas de conexão legado...');
           this.whatsappChecker.reconnectAttempts = 0;
-          this.whatsappChecker.connect();
+          // Não conectar automaticamente o checker legado
+          console.log('⚠️ Conexão automática desabilitada - use instâncias específicas');
         }, 5 * 60 * 1000);
       });
 

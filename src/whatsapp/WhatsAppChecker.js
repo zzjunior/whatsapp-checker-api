@@ -14,6 +14,8 @@ class WhatsAppChecker extends EventEmitter {
     this.maxReconnectAttempts = config.maxReconnectAttempts;
     this.reconnectDelay = config.reconnectDelay;
     this.isConnecting = false;
+    this.shouldReconnect = true; // Flag para controlar reconexão
+    this.reconnectTimeout = null; // Para cancelar timeouts
   }
 
   async connect() {
@@ -23,6 +25,7 @@ class WhatsAppChecker extends EventEmitter {
     }
 
     this.isConnecting = true;
+    this.shouldReconnect = true; // Ativar reconexão
     
     try {
       const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
@@ -81,7 +84,7 @@ class WhatsAppChecker extends EventEmitter {
       this.isConnecting = false;
       const shouldReconnect = this.handleDisconnection(lastDisconnect);
       
-      if (shouldReconnect) {
+      if (shouldReconnect && this.shouldReconnect) {
         this.scheduleReconnect();
       } else {
         console.log('❌ WhatsApp OFF - Não tentando reconectar');
@@ -139,6 +142,11 @@ class WhatsAppChecker extends EventEmitter {
   }
 
   scheduleReconnect() {
+    if (!this.shouldReconnect) {
+      console.log('🛑 Reconexão cancelada pelo usuário');
+      return;
+    }
+    
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.log(`❌ Máximo de ${this.maxReconnectAttempts} tentativas de reconexão atingido`);
       this.emit('max_reconnect_attempts');
@@ -150,8 +158,10 @@ class WhatsAppChecker extends EventEmitter {
     
     console.log(`🔄 Tentativa ${this.reconnectAttempts}/${this.maxReconnectAttempts} em ${delay/1000}s...`);
     
-    setTimeout(() => {
-      this.connect();
+    this.reconnectTimeout = setTimeout(() => {
+      if (this.shouldReconnect) {
+        this.connect();
+      }
     }, delay);
   }
 
@@ -226,16 +236,36 @@ class WhatsAppChecker extends EventEmitter {
   // Desconectar gracefully
   async disconnect() {
     try {
+      console.log('🛑 Desconectando WhatsApp...');
+      
+      // Parar tentativas de reconexão
+      this.shouldReconnect = false;
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+      
       if (this.socket) {
-        console.log('🛑 Desconectando WhatsApp...');
         await this.socket.logout();
         this.socket = null;
       }
       this.isConnecting = false;
       this.reconnectAttempts = 0;
+      
+      console.log('✅ WhatsApp desconectado com sucesso');
     } catch (error) {
       console.error('❌ Erro ao desconectar:', error);
     }
+  }
+
+  // Método para parar completamente as tentativas de reconexão
+  stopReconnecting() {
+    this.shouldReconnect = false;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    console.log('🛑 Tentativas de reconexão interrompidas');
   }
 }
 
