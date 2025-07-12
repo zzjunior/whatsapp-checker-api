@@ -828,9 +828,10 @@ class WhatsAppCheckerAPI {
         console.log(`📁 Diretório criado: ${authDir}`);
       }
       
-      // Restaurar arquivos
+      // Restaurar arquivos baseado na estrutura do Baileys
       let filesRestored = 0;
       
+      // Arquivo principal de credenciais
       if (sessionData.creds) {
         const credsPath = path.join(authDir, 'creds.json');
         fs.writeFileSync(credsPath, JSON.stringify(sessionData.creds, null, 2));
@@ -838,6 +839,7 @@ class WhatsAppCheckerAPI {
         filesRestored++;
       }
       
+      // Chaves de sincronização
       if (sessionData.keys) {
         const keysPath = path.join(authDir, 'app-state-sync-version-regular.json');
         fs.writeFileSync(keysPath, JSON.stringify(sessionData.keys, null, 2));
@@ -845,18 +847,19 @@ class WhatsAppCheckerAPI {
         filesRestored++;
       }
       
-      // Outros arquivos que podem existir
-      if (sessionData.preKeys) {
-        const preKeysPath = path.join(authDir, 'pre-key-1.json');
-        fs.writeFileSync(preKeysPath, JSON.stringify(sessionData.preKeys, null, 2));
-        console.log(`✅ Restaurado: pre-key-1.json`);
-        filesRestored++;
-      }
-      
-      if (sessionData.sessions) {
-        const sessionsPath = path.join(authDir, 'session-1.json');
-        fs.writeFileSync(sessionsPath, JSON.stringify(sessionData.sessions, null, 2));
-        console.log(`✅ Restaurado: session-1.json`);
+      // Se não houver dados específicos, tentar restaurar estrutura básica
+      if (filesRestored === 0) {
+        // Criar estrutura mínima necessária
+        const credsPath = path.join(authDir, 'creds.json');
+        const minimalCreds = {
+          noiseKey: sessionData.noiseKey || null,
+          pairingEphemeralKeyPair: sessionData.pairingEphemeralKeyPair || null,
+          pairingCode: sessionData.pairingCode || null,
+          lastAccountSyncTimestamp: sessionData.lastAccountSyncTimestamp || null
+        };
+        
+        fs.writeFileSync(credsPath, JSON.stringify(minimalCreds, null, 2));
+        console.log(`✅ Criado: creds.json (estrutura mínima)`);
         filesRestored++;
       }
       
@@ -865,7 +868,8 @@ class WhatsAppCheckerAPI {
         message: `Arquivos de autenticação restaurados com sucesso`,
         files_restored: filesRestored,
         auth_dir: authDir,
-        backup_date: instance.session_backup_at
+        backup_date: instance.session_backup_at,
+        note: 'Você pode precisar escanear o QR code novamente'
       });
       
     } catch (error) {

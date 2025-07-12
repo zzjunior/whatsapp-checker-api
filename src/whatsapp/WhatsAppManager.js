@@ -151,8 +151,47 @@ class WhatsAppManager {
     try {
       const checker = await this.getInstance(instanceId);
       
-      // Reconfigurar eventos com os callbacks
-      this.setupInstanceEvents(instanceId, checker, callbacks);
+      // Verificar se já está conectado
+      if (checker.isConnected()) {
+        console.log(`✅ Instância ${instanceId} já está conectada`);
+        return checker;
+      }
+      
+      // Verificar se já está tentando conectar
+      if (checker.isConnecting) {
+        console.log(`🔄 Instância ${instanceId} já está tentando conectar`);
+        return checker;
+      }
+      
+      // Configurar eventos temporários apenas para este connect
+      const tempEvents = {};
+      
+      if (callbacks.onQRCode) {
+        tempEvents.onQR = (qr) => callbacks.onQRCode(qr);
+        checker.on('qr', tempEvents.onQR);
+      }
+      
+      if (callbacks.onConnected) {
+        tempEvents.onReady = () => {
+          callbacks.onConnected();
+          // Limpar eventos temporários
+          if (tempEvents.onQR) checker.off('qr', tempEvents.onQR);
+          if (tempEvents.onReady) checker.off('ready', tempEvents.onReady);
+          if (tempEvents.onDisconnected) checker.off('disconnected', tempEvents.onDisconnected);
+        };
+        checker.on('ready', tempEvents.onReady);
+      }
+      
+      if (callbacks.onDisconnected) {
+        tempEvents.onDisconnected = () => {
+          callbacks.onDisconnected();
+          // Limpar eventos temporários
+          if (tempEvents.onQR) checker.off('qr', tempEvents.onQR);
+          if (tempEvents.onReady) checker.off('ready', tempEvents.onReady);
+          if (tempEvents.onDisconnected) checker.off('disconnected', tempEvents.onDisconnected);
+        };
+        checker.on('disconnected', tempEvents.onDisconnected);
+      }
       
       await checker.connect();
       

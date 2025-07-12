@@ -212,20 +212,15 @@ class WhatsAppChecker extends EventEmitter {
 
   // Verificar se está conectado
   isConnected() {
-    return this.socket && this.socket.readyState === 1; // 1 = OPEN
+    return this.socket && this.socket.user && !this.isConnecting;
   }
 
   // Obter status da conexão
   getConnectionStatus() {
     if (!this.socket) return 'disconnected';
-    
-    switch (this.socket.readyState) {
-      case 0: return 'connecting';
-      case 1: return 'connected';
-      case 2: return 'closing';
-      case 3: return 'closed';
-      default: return 'unknown';
-    }
+    if (this.isConnecting) return 'connecting';
+    if (this.socket.user) return 'connected';
+    return 'disconnected';
   }
 
   // Desconectar gracefully
