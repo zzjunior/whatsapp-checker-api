@@ -110,8 +110,8 @@ async function apiRequest(endpoint, method = 'GET', data = null) {
 
 async function checkWhatsAppStatus() {
     try {
-        const response = await fetch('/api/status');
-        const data = await response.json();
+        const response = await apiRequest('/api/status');
+        const data = response;
         
         const statusElement = document.getElementById('whatsappStatus');
         if (data.connected) {
@@ -123,6 +123,12 @@ async function checkWhatsAppStatus() {
         }
     } catch (error) {
         console.error('Erro ao verificar status:', error);
+        // Fallback para status offline em caso de erro
+        const statusElement = document.getElementById('whatsappStatus');
+        if (statusElement) {
+            statusElement.className = 'badge bg-secondary status-badge me-3';
+            statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>WhatsApp: Erro';
+        }
     }
 }
 

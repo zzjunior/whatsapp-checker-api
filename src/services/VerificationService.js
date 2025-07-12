@@ -18,12 +18,16 @@ class VerificationService {
       // Buscar informações do token para identificar a instância
       let instanceId = null;
       if (tokenId) {
+        console.log(`🔍 Verificando token ${tokenId} para buscar instância...`);
         const tokenInfo = await this.db.query(
           'SELECT whatsapp_instance_id FROM api_tokens WHERE id = ?',
           [tokenId]
         );
         if (tokenInfo.length > 0) {
           instanceId = tokenInfo[0].whatsapp_instance_id;
+          console.log(`📱 Token ${tokenId} associado à instância ${instanceId}`);
+        } else {
+          console.log(`⚠️  Token ${tokenId} não encontrado no banco`);
         }
       }
 
@@ -48,10 +52,20 @@ class VerificationService {
       }
 
       // Verificar se a instância está conectada
+      console.log(`🔍 Buscando instância ${instanceId}...`);
       const instance = this.whatsappManager.getInstance(instanceId);
-      if (!instance || !instance.isConnected()) {
+      if (!instance) {
+        console.log(`❌ Instância ${instanceId} não encontrada no manager`);
+        throw new Error('Instância WhatsApp não encontrada. Verifique se ela foi criada corretamente.');
+      }
+      
+      console.log(`📱 Instância ${instanceId} encontrada, verificando conexão...`);
+      if (!instance.isConnected()) {
+        console.log(`❌ Instância ${instanceId} não está conectada`);
         throw new Error('Instância WhatsApp não está conectada. Tente novamente em alguns minutos.');
       }
+      
+      console.log(`✅ Instância ${instanceId} está conectada, prosseguindo com verificação...`);
 
       // Se não estiver no cache ou for forçado, verificar via WhatsApp
       let result;

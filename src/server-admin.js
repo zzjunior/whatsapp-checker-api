@@ -155,6 +155,9 @@ class WhatsAppCheckerAPI {
         }
       });
     });
+    
+    // Debug endpoint para verificar estado das instâncias
+    this.app.get('/debug/instances', this.middlewareAdminAuth.bind(this), this.debugInstances.bind(this));
   }
 
   // Middlewares
@@ -202,11 +205,11 @@ class WhatsAppCheckerAPI {
     }
   }
 
-  getWhatsAppStatus(req, res) {
+  async getWhatsAppStatus(req, res) {
     // Se tiver token API, verificar status da instância específica
     if (req.apiToken && req.apiToken.id) {
       try {
-        const instance = this.whatsappManager.getInstanceByToken(req.apiToken.id);
+        const instance = await this.whatsappManager.getInstanceByToken(req.apiToken.id);
         if (instance) {
           const connected = instance.isConnected();
           return res.json({
@@ -583,6 +586,39 @@ class WhatsAppCheckerAPI {
       await this.whatsappManager.disconnectInstance(instanceId);
       
       res.json({ message: 'Instância desconectada' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async debugInstances(req, res) {
+    try {
+      // Verificar instâncias no banco
+      const dbInstances = await this.database.query('SELECT * FROM whatsapp_instances ORDER BY id');
+      
+      // Verificar instâncias no manager
+      const managerInstances = [];
+      for (const [id, instance] of this.whatsappManager.instances) {
+        managerInstances.push({
+          id: id,
+          connected: instance.isConnected(),
+          authPath: instance.authPath || 'N/A'
+        });
+      }
+      
+      // Verificar tokens
+      const tokens = await this.database.query(`
+        SELECT t.id, t.name, t.whatsapp_instance_id, i.status 
+        FROM api_tokens t 
+        LEFT JOIN whatsapp_instances i ON t.whatsapp_instance_id = i.id
+      `);
+      
+      res.json({
+        database_instances: dbInstances,
+        manager_instances: managerInstances,
+        tokens: tokens,
+        manager_size: this.whatsappManager.instances.size
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
