@@ -167,6 +167,9 @@ class WhatsAppCheckerAPI {
     
     // Endpoint para verificar arquivos de auth
     this.app.get('/api/check-auth', this.middlewareAuth.bind(this), this.checkAuthFiles.bind(this));
+    
+    // Endpoint para restaurar arquivos de auth do backup
+    this.app.post('/api/restore-auth', this.middlewareAuth.bind(this), this.restoreAuthFiles.bind(this));
   }
 
   // Middlewares
@@ -772,6 +775,101 @@ class WhatsAppCheckerAPI {
       });
       
     } catch (error) {
+      res.status(500).json({ error: error.message, stack: error.stack });
+    }
+  }
+
+  // Endpoint para restaurar arquivos de autenticação do backup do banco de dados
+  async restoreAuthFiles(req, res) {
+    try {
+      const instanceId = req.apiToken.whatsapp_instance_id;
+      
+      if (!instanceId) {
+        return res.status(400).json({ error: 'Token não possui instância associada' });
+      }
+      
+      console.log(`📂 Restaurando arquivos de auth para instância ${instanceId}...`);
+      
+      // Buscar dados da instância
+      const instances = await this.database.query(
+        'SELECT * FROM whatsapp_instances WHERE id = ?',
+        [instanceId]
+      );
+      
+      if (instances.length === 0) {
+        return res.status(404).json({ error: 'Instância não encontrada' });
+      }
+      
+      const instance = instances[0];
+      const authPath = instance.auth_path;
+      
+      // Verificar se existe backup no banco
+      const backups = await this.database.query(
+        'SELECT session_data FROM whatsapp_instances WHERE id = ? AND session_data IS NOT NULL',
+        [instanceId]
+      );
+      
+      if (backups.length === 0 || !backups[0].session_data) {
+        return res.status(404).json({ 
+          error: 'Backup de sessão não encontrado',
+          message: 'Você precisa conectar o WhatsApp primeiro para criar um backup'
+        });
+      }
+      
+      const sessionData = JSON.parse(backups[0].session_data);
+      
+      // Criar diretório de auth se não existir
+      const fs = require('fs');
+      const path = require('path');
+      
+      const authDir = path.resolve(authPath);
+      if (!fs.existsSync(authDir)) {
+        fs.mkdirSync(authDir, { recursive: true });
+        console.log(`📁 Diretório criado: ${authDir}`);
+      }
+      
+      // Restaurar arquivos
+      let filesRestored = 0;
+      
+      if (sessionData.creds) {
+        const credsPath = path.join(authDir, 'creds.json');
+        fs.writeFileSync(credsPath, JSON.stringify(sessionData.creds, null, 2));
+        console.log(`✅ Restaurado: creds.json`);
+        filesRestored++;
+      }
+      
+      if (sessionData.keys) {
+        const keysPath = path.join(authDir, 'app-state-sync-version-regular.json');
+        fs.writeFileSync(keysPath, JSON.stringify(sessionData.keys, null, 2));
+        console.log(`✅ Restaurado: app-state-sync-version-regular.json`);
+        filesRestored++;
+      }
+      
+      // Outros arquivos que podem existir
+      if (sessionData.preKeys) {
+        const preKeysPath = path.join(authDir, 'pre-key-1.json');
+        fs.writeFileSync(preKeysPath, JSON.stringify(sessionData.preKeys, null, 2));
+        console.log(`✅ Restaurado: pre-key-1.json`);
+        filesRestored++;
+      }
+      
+      if (sessionData.sessions) {
+        const sessionsPath = path.join(authDir, 'session-1.json');
+        fs.writeFileSync(sessionsPath, JSON.stringify(sessionData.sessions, null, 2));
+        console.log(`✅ Restaurado: session-1.json`);
+        filesRestored++;
+      }
+      
+      res.json({
+        success: true,
+        message: `Arquivos de autenticação restaurados com sucesso`,
+        files_restored: filesRestored,
+        auth_dir: authDir,
+        backup_date: instance.session_backup_at
+      });
+      
+    } catch (error) {
+      console.error('Erro ao restaurar arquivos de auth:', error);
       res.status(500).json({ error: error.message, stack: error.stack });
     }
   }
