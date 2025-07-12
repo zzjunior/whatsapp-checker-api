@@ -7,3 +7,19 @@ auth.json
 *.log
 database.sqlite
 scripts/
+
+# Arquivos de deploy local (não precisam no repositório)
+deploy.ps1
+deploy.sh
+ecosystem.config.js
+
+# Backups automáticos
+auth-backup-*
+backup-auth-*
+
+# Logs do PM2
+logs/
+
+# Arquivos temporários
+*.tmp
+*.temp

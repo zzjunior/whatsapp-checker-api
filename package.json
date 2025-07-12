@@ -9,12 +9,7 @@
     "clear-auth": "node scripts/clear-auth.js",
     "test-db": "node scripts/test-db.js",
     "deploy": "git add . && git commit -m 'deploy: atualizações' && git push origin main",
-    "deploy:railway": "railway deploy",
-    "logs": "railway logs",
-    "logs:follow": "railway logs --follow",
-    "status": "railway status",
-    "health": "curl $RAILWAY_STATIC_URL/health || curl http://localhost:3000/health",
-    "env": "railway variables"
+    "health": "curl $RAILWAY_STATIC_URL/health || curl http://localhost:3000/health"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.5.0",
