@@ -738,10 +738,10 @@ function setupTokenModal() {
     
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
-    // Configurar evento do botão criar
+    // Configurar evento do botão criar (apenas uma vez)
     document.getElementById('createTokenBtn').addEventListener('click', createToken);
     
-    // Configurar evento de submit do formulário
+    // Configurar evento de submit do formulário (apenas uma vez)
     document.getElementById('createTokenForm').addEventListener('submit', function(e) {
         e.preventDefault();
         createToken();
@@ -749,8 +749,12 @@ function setupTokenModal() {
 }
 
 function showCreateTokenModal() {
+    // Garantir que o modal existe antes de tentar usar
+    setupTokenModal();
+    
     // Carregar instâncias disponíveis antes de mostrar o modal
     loadInstancesForToken();
+    
     const modal = new bootstrap.Modal(document.getElementById('createTokenModal'));
     modal.show();
 }
@@ -759,6 +763,11 @@ async function loadInstancesForToken() {
     try {
         const instances = await apiRequest('/admin/instances');
         const select = document.getElementById('tokenInstance');
+        
+        if (!select) {
+            console.error('Elemento tokenInstance não encontrado');
+            return;
+        }
         
         // Limpar opções existentes
         select.innerHTML = '<option value="">Selecione uma instância...</option>';
@@ -789,7 +798,7 @@ async function loadInstancesForToken() {
             `;
             
             const modalBody = document.querySelector('#createTokenModal .modal-body');
-            if (!modalBody.querySelector('.alert-warning')) {
+            if (modalBody && !modalBody.querySelector('.alert-warning')) {
                 modalBody.insertAdjacentHTML('afterbegin', alertHtml);
             }
         } else {
