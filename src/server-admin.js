@@ -74,7 +74,6 @@ class WhatsAppCheckerAPI {
     this.app.post('/api/check', this.middlewareAuth.bind(this), this.checkNumber.bind(this));
     this.app.get('/api/status', this.getWhatsAppStatus.bind(this));
     this.app.post('/admin/login', this.adminLogin.bind(this));
-    this.app.post('/admin/register', this.registerUser.bind(this));
     this.app.get('/admin/status', this.middlewareAdminAuth.bind(this), this.getAdminStatus.bind(this));
     this.app.get('/admin/stats', this.middlewareAdminAuth.bind(this), this.getStats.bind(this));
     
@@ -150,9 +149,6 @@ class WhatsAppCheckerAPI {
         }
       });
     });
-
-    // Debug endpoint para verificar instâncias
-    this.app.get('/admin/debug-instances', this.middlewareAdminAuth.bind(this), this.debugInstances.bind(this));
   }
 
   // Middlewares
@@ -309,8 +305,9 @@ class WhatsAppCheckerAPI {
       const bcrypt = require('bcryptjs');
       const hashed = await bcrypt.hash(password, 12);
       await this.database.query('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', [username, hashed, role]);
-      res.json({ message: 'Usuário cadastrado' });
+      res.json({ message: 'Usuário criado com sucesso' });
     } catch (error) {
+      console.error('❌ Erro ao criar usuário:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -318,16 +315,6 @@ class WhatsAppCheckerAPI {
     try {
       const users = await this.database.query('SELECT id, username, role as user_type FROM users');
       res.json(users);
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  }
-  async deleteUser(req, res) {
-    try {
-      const { id } = req.params;
-      if (!id) return res.status(400).json({ error: 'ID obrigatório' });
-      await this.database.query('DELETE FROM users WHERE id = ?', [id]);
-      res.json({ message: 'Usuário excluído' });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -411,24 +398,6 @@ class WhatsAppCheckerAPI {
   }
 
   // Novos métodos para o sistema multi-usuário
-
-  async registerUser(req, res) {
-    try {
-      const { username, password } = req.body;
-      
-      if (!username || !password) {
-        return res.status(400).json({ error: 'Username e password são obrigatórios' });
-      }
-
-      const user = await this.authService.createUser(username, password, 'user');
-      res.json({ 
-        message: 'Usuário criado com sucesso',
-        user: { id: user.id, username: user.username, role: user.role }
-      });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  }
 
   async getStats(req, res) {
     try {

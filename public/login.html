@@ -69,55 +69,7 @@
                                 Entrar
                             </button>
                         </form>
-                        
-                        <hr class="my-4">
-                        
-                        <div class="text-center">
-                            <p class="text-muted mb-2">Não tem uma conta?</p>
-                            <button class="btn btn-outline-secondary" id="registerBtn">
-                                <i class="bi bi-person-plus me-2"></i>
-                                Criar Conta
-                            </button>
-                        </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal de Registro -->
-    <div class="modal fade" id="registerModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="bi bi-person-plus me-2"></i>
-                        Criar Nova Conta
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="registerForm">
-                        <div class="mb-3">
-                            <label for="regUsername" class="form-label">Usuário</label>
-                            <input type="text" class="form-control" id="regUsername" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="regPassword" class="form-label">Senha</label>
-                            <input type="password" class="form-control" id="regPassword" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="regPasswordConfirm" class="form-label">Confirmar Senha</label>
-                            <input type="password" class="form-control" id="regPasswordConfirm" required>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-whatsapp" id="createAccountBtn">
-                        <i class="bi bi-check-lg me-2"></i>
-                        Criar Conta
-                    </button>
                 </div>
             </div>
         </div>
@@ -169,47 +121,6 @@
             } finally {
                 loginBtn.disabled = false;
                 loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Entrar';
-            }
-        });
-
-        // Registro
-        document.getElementById('registerBtn').addEventListener('click', () => {
-            new bootstrap.Modal(document.getElementById('registerModal')).show();
-        });
-
-        document.getElementById('createAccountBtn').addEventListener('click', async () => {
-            const username = document.getElementById('regUsername').value;
-            const password = document.getElementById('regPassword').value;
-            const passwordConfirm = document.getElementById('regPasswordConfirm').value;
-            
-            if (!username || !password) {
-                alert('Preencha todos os campos');
-                return;
-            }
-            
-            if (password !== passwordConfirm) {
-                alert('Senhas não conferem');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/admin/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    bootstrap.Modal.getInstance(document.getElementById('registerModal')).hide();
-                    showAlert('Conta criada com sucesso! Faça login.', 'success');
-                    document.getElementById('registerForm').reset();
-                } else {
-                    alert(data.error || 'Erro ao criar conta');
-                }
-            } catch (error) {
-                alert('Erro de conexão. Tente novamente.');
             }
         });
     </script>

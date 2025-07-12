@@ -542,7 +542,7 @@ function loadLogs() {
     `;
 }
 
-function loadUsers() {
+async function loadUsers() {
     if (currentUser.role !== 'admin') {
         document.getElementById('pageContent').innerHTML = `
             <div class="alert alert-warning">
@@ -553,28 +553,168 @@ function loadUsers() {
         return;
     }
     
-    document.getElementById('pageContent').innerHTML = `
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4>Gerenciar Usuários</h4>
-            <button class="btn btn-primary" onclick="createUser()">
-                <i class="bi bi-person-plus me-2"></i>Novo Usuário
-            </button>
-        </div>
+    try {
+        const users = await apiRequest('/admin/users');
         
-        <div class="card">
-            <div class="card-body">
-                <div class="text-center py-5">
-                    <i class="bi bi-people fs-1 text-muted"></i>
-                    <h5 class="mt-3">Em desenvolvimento</h5>
-                    <p class="text-muted">Gerenciamento de usuários será implementado</p>
+        document.getElementById('pageContent').innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4>Gerenciar Usuários</h4>
+                <button class="btn btn-primary" onclick="showCreateUserModal()">
+                    <i class="bi bi-person-plus me-2"></i>Novo Usuário
+                </button>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Usuário</th>
+                                    <th>Tipo</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                ${users.map(user => `
+                                    <tr>
+                                        <td>${user.id}</td>
+                                        <td>${user.username}</td>
+                                        <td>
+                                            <span class="badge bg-${user.user_type === 'admin' ? 'danger' : 'primary'}">
+                                                ${user.user_type === 'admin' ? 'Administrador' : 'Comum'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            ${user.id !== currentUser.id ? `
+                                                <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id}, '${user.username}')">
+                                                    <i class="bi bi-trash"></i> Excluir
+                                                </button>
+                                            ` : `
+                                                <span class="text-muted">Você</span>
+                                            `}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
-    `;
+            
+            <!-- Modal para criar usuário -->
+            <div class="modal fade" id="createUserModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Novo Usuário</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="createUserForm">
+                                <div class="mb-3">
+                                    <label for="newUsername" class="form-label">Nome de Usuário</label>
+                                    <input type="text" class="form-control" id="newUsername" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newPassword" class="form-label">Senha</label>
+                                    <input type="password" class="form-control" id="newPassword" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="userType" class="form-label">Tipo de Usuário</label>
+                                    <select class="form-select" id="userType" required>
+                                        <option value="common">Comum</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" onclick="createUser()">Criar Usuário</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        if (users.length === 0) {
+            document.getElementById('usersTableBody').innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center py-5">
+                        <i class="bi bi-people fs-1 text-muted"></i>
+                        <h5 class="mt-3">Nenhum usuário encontrado</h5>
+                        <p class="text-muted">Clique em "Novo Usuário" para começar</p>
+                    </td>
+                </tr>
+            `;
+        }
+        
+    } catch (error) {
+        console.error('Erro ao carregar usuários:', error);
+        document.getElementById('pageContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Erro ao carregar usuários: ${error.message}
+            </div>
+        `;
+    }
 }
 
-function createUser() {
-    console.log('Criar usuário');
+function showCreateUserModal() {
+    const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+    modal.show();
+}
+
+async function createUser() {
+    try {
+        const username = document.getElementById('newUsername').value.trim();
+        const password = document.getElementById('newPassword').value;
+        const user_type = document.getElementById('userType').value;
+        
+        if (!username || !password) {
+            alert('Todos os campos são obrigatórios');
+            return;
+        }
+        
+        await apiRequest('/admin/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, user_type })
+        });
+        
+        // Fechar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('createUserModal'));
+        modal.hide();
+        
+        // Limpar formulário
+        document.getElementById('createUserForm').reset();
+        
+        // Recarregar lista
+        loadUsers();
+        
+        showSuccess('Usuário criado com sucesso');
+        
+    } catch (error) {
+        console.error('Erro ao criar usuário:', error);
+        alert('Erro ao criar usuário: ' + error.message);
+    }
+}
+
+async function deleteUser(userId, username) {
+    if (!confirm(`Tem certeza que deseja excluir o usuário "${username}"?`)) {
+        return;
+    }
+    
+    try {
+        await apiRequest(`/admin/users/${userId}`, { method: 'DELETE' });
+        loadUsers();
+        showSuccess('Usuário excluído com sucesso');
+    } catch (error) {
+        console.error('Erro ao excluir usuário:', error);
+        alert('Erro ao excluir usuário: ' + error.message);
+    }
 }
 
 function loadSettings() {
@@ -636,8 +776,8 @@ function showAlert(message, type = 'info') {
     
     // Auto remove após 5 segundos
     setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.parentNode.removeChild(alertDiv);
+        if (alertDiv && alertDiv.parentNode) {
+            alertDiv.remove();
         }
     }, 5000);
 }
