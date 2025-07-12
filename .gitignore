@@ -23,3 +23,6 @@ logs/
 # Arquivos temporários
 *.tmp
 *.temp
+
+# Arquivos de migração SQL (manter apenas no dev)
+migration-*.sql

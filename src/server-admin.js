@@ -150,6 +150,9 @@ class WhatsAppCheckerAPI {
         }
       });
     });
+
+    // Debug endpoint para verificar instâncias
+    this.app.get('/admin/debug-instances', this.middlewareAdminAuth.bind(this), this.debugInstances.bind(this));
   }
 
   // Middlewares

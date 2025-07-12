@@ -13,8 +13,8 @@ class WhatsAppManager {
       
       // Salvar no banco
       const result = await this.db.query(
-        'INSERT INTO whatsapp_instances (user_id, name, auth_path) VALUES (?, ?, ?)',
-        [userId, instanceName, authPath]
+        'INSERT INTO whatsapp_instances (user_id, name, auth_path, status) VALUES (?, ?, ?, ?)',
+        [userId, instanceName, authPath, 'disconnected']
       );
       
       const instanceId = result.insertId;
@@ -91,10 +91,18 @@ class WhatsAppManager {
   }
 
   async getUserInstances(userId) {
-    return await this.db.query(
+    const results = await this.db.query(
       'SELECT * FROM whatsapp_instances WHERE user_id = ? ORDER BY created_at DESC',
       [userId]
     );
+    
+    // Log para debug
+    console.log(`📱 Instâncias encontradas para usuário ${userId}:`, results.length);
+    results.forEach(instance => {
+      console.log(`  - ID: ${instance.id}, Nome: ${instance.name}, Status: ${instance.status}`);
+    });
+    
+    return results;
   }
 
   async deleteInstance(instanceId, userId) {
@@ -171,9 +179,9 @@ class WhatsAppManager {
     try {
       console.log('🔄 Inicializando instâncias salvas...');
       
-      // Buscar todas as instâncias ativas do banco
+      // Buscar todas as instâncias do banco
       const instances = await this.db.query(
-        'SELECT * FROM whatsapp_instances WHERE status != "deleted" ORDER BY created_at DESC'
+        'SELECT * FROM whatsapp_instances ORDER BY created_at DESC'
       );
       
       console.log(`📱 Encontradas ${instances.length} instâncias para inicializar`);

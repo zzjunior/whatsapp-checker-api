@@ -19,14 +19,14 @@ class VerificationService {
       if (!forceCheck) {
         const cached = await this.getCachedResult(cleanNumber);
         if (cached) {
-          await this.logVerification(tokenId, cleanNumber, cached.is_valid, ipAddress, userAgent);
+          const isValid = cached.result === 'valid';
+          await this.logVerification(tokenId, cleanNumber, isValid, ipAddress, userAgent);
           return {
             phone: cleanNumber,
             input: phoneNumber,
-            has_whatsapp: cached.is_valid,
-            whatsapp_jid: cached.whatsapp_jid,
+            has_whatsapp: isValid,
             from_cache: true,
-            checked_at: cached.last_checked
+            checked_at: cached.cached_at
           };
         }
       }
@@ -70,7 +70,7 @@ class VerificationService {
   async getCachedResult(phoneNumber) {
     try {
       const results = await this.db.query(
-        'SELECT * FROM phone_cache WHERE phone_number = ? AND expires_at > NOW()',
+        'SELECT * FROM verification_cache WHERE phone = ? AND expires_at > NOW()',
         [phoneNumber]
       );
 
@@ -85,16 +85,16 @@ class VerificationService {
   async saveToCache(phoneNumber, isValid, whatsappJid) {
     try {
       const expiresAt = new Date(Date.now() + this.cacheExpiration);
+      const result = isValid ? 'valid' : 'invalid';
       
       await this.db.query(
-        `INSERT INTO phone_cache (phone_number, is_valid, whatsapp_jid, expires_at) 
-         VALUES (?, ?, ?, ?) 
+        `INSERT INTO verification_cache (phone, result, expires_at) 
+         VALUES (?, ?, ?) 
          ON DUPLICATE KEY UPDATE 
-         is_valid = VALUES(is_valid), 
-         whatsapp_jid = VALUES(whatsapp_jid), 
-         last_checked = CURRENT_TIMESTAMP, 
+         result = VALUES(result), 
+         cached_at = CURRENT_TIMESTAMP, 
          expires_at = VALUES(expires_at)`,
-        [phoneNumber, isValid, whatsappJid, expiresAt]
+        [phoneNumber, result, expiresAt]
       );
     } catch (error) {
       console.error('Erro ao salvar cache:', error);
@@ -104,9 +104,10 @@ class VerificationService {
   // Log da verificação
   async logVerification(tokenId, phoneNumber, isValid, ipAddress, userAgent) {
     try {
+      const result = isValid ? 'valid' : 'invalid';
       await this.db.query(
-        'INSERT INTO verification_logs (token_id, phone_number, is_valid, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)',
-        [tokenId, phoneNumber, isValid, ipAddress, userAgent]
+        'INSERT INTO verification_logs (token_id, phone, result, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)',
+        [tokenId, phoneNumber, result, ipAddress, userAgent]
       );
     } catch (error) {
       console.error('Erro ao fazer log:', error);
@@ -134,18 +135,21 @@ class VerificationService {
         params
       );
 
+      const validWhere = tokenId ? 'WHERE token_id = ? AND result = \'valid\'' : 'WHERE result = \'valid\'';
+      const invalidWhere = tokenId ? 'WHERE token_id = ? AND result = \'invalid\'' : 'WHERE result = \'invalid\'';
+
       const [validNumbers] = await this.db.query(
-        `SELECT COUNT(*) as total FROM verification_logs ${where} AND is_valid = TRUE`,
+        `SELECT COUNT(*) as total FROM verification_logs ${validWhere}`,
         params
       );
 
       const [invalidNumbers] = await this.db.query(
-        `SELECT COUNT(*) as total FROM verification_logs ${where} AND is_valid = FALSE`,
+        `SELECT COUNT(*) as total FROM verification_logs ${invalidWhere}`,
         params
       );
 
       const [cacheSize] = await this.db.query(
-        'SELECT COUNT(*) as total FROM phone_cache WHERE expires_at > NOW()'
+        'SELECT COUNT(*) as total FROM verification_cache WHERE expires_at > NOW()'
       );
 
       return {
