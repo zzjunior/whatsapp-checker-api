@@ -279,7 +279,9 @@ async function loadDashboardData() {
         // Carregar estatísticas
         const stats = await apiRequest('/admin/stats');
         
-        document.getElementById('totalVerifications').textContent = stats.total_verifications || 0;
+        // Atualizar elementos do dashboard
+        document.getElementById('totalVerifications').textContent = stats.today_verifications || 0;
+        document.getElementById('totalInstances').textContent = stats.active_instances || 0;
         document.getElementById('totalTokens').textContent = stats.active_tokens || 0;
         document.getElementById('cacheSize').textContent = stats.cache_size || 0;
         
@@ -294,8 +296,32 @@ async function loadDashboardData() {
             dashboardStatus.textContent = 'Offline';
         }
         
+        // Carregar verificações recentes
+        await loadRecentVerifications();
+        
     } catch (error) {
         console.error('Erro ao carregar dashboard:', error);
+        // Definir valores padrão em caso de erro
+        document.getElementById('totalVerifications').textContent = '0';
+        document.getElementById('totalInstances').textContent = '0';
+        document.getElementById('totalTokens').textContent = '0';
+        document.getElementById('cacheSize').textContent = '0';
+    }
+}
+
+async function loadRecentVerifications() {
+    try {
+        // Por enquanto, vamos mostrar uma mensagem simples
+        const container = document.getElementById('recentVerifications');
+        container.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="bi bi-clock-history fs-4"></i>
+                <p class="mt-2">Verificações recentes aparecerão aqui</p>
+                <small>Funcionalidade em desenvolvimento</small>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Erro ao carregar verificações recentes:', error);
     }
 }
 
@@ -363,7 +389,7 @@ function loadInstances() {
 async function loadInstancesData() {
     try {
         const instances = await apiRequest('/admin/instances');
-        const container = document.getElementById('instancesList');
+        const container = document.getElementById('instances-list');
         
         if (instances.length === 0) {
             container.innerHTML = `

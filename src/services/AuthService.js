@@ -147,6 +147,11 @@ class AuthService {
     }
   }
 
+  // Alias para compatibilidade
+  async getUserTokens(userId) {
+    return this.listApiTokens(userId);
+  }
+
   // Desativar token API
   async deactivateApiToken(tokenId) {
     try {

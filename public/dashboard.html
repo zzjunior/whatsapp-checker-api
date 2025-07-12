@@ -13,7 +13,7 @@
             left: 0;
             height: 100vh;
             width: 250px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #548372 0%, #70a48c 100%);
             transition: all 0.3s;
             z-index: 1000;
         }
@@ -46,7 +46,7 @@
         }
         
         .sidebar-menu li {
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid rgba(119, 117, 117, 0.1);
         }
         
         .sidebar-menu a {
@@ -85,7 +85,7 @@
         }
         
         .card-stats {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #888ea9 0%, #847d8b 100%);
             color: white;
         }
         
@@ -110,12 +110,12 @@
     <!-- Sidebar -->
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <h4 class="mb-0">
+            <span class="mb-0 sidebar-menu">
                 <i class="bi bi-whatsapp me-2"></i>
-                <span>WA Checker</span>
-            </h4>
-            <small class="opacity-75">
-                <span id="userRole">Admin</span> - <span id="userName">Usuario</span>
+                <span class="h6">WA Checker Api</span>
+            </span>
+            <small class="opacity-75 sidebar-menu">
+                <span id="userRole">Admin</span><span> -</span> <span id="userName">Usuario</span>
             </small>
         </div>
         
@@ -202,6 +202,14 @@
             </div>
         </div>
     </main>
+
+    <!-- Footer com assinatura de autoria -->
+    <footer class="position-fixed bottom-0 start-0 w-100 bg-transparent text-center py-2" style="z-index: 999;">
+        <span class="text-muted" style="opacity: 0.6; font-size: 0.85rem;">
+            Autor: <a href="https://linksbio.me/juniorsantos" target="_blank" rel="noopener noreferrer" 
+                      class="text-muted text-decoration-none" style="opacity: 0.7;">Junior Santos</a>
+        </span>
+    </footer>
 
     <!-- Modal para mudança de senha -->
     <div class="modal fade" id="changePasswordModal" tabindex="-1">

@@ -38,8 +38,8 @@ class WhatsAppCheckerAPI {
   }
 
   setupMiddleware() {
-    // Configurar trust proxy para Railway
-    this.app.set('trust proxy', true);
+    // Configurar trust proxy para Railway (mais específico)
+    this.app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
     
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
@@ -51,7 +51,11 @@ class WhatsAppCheckerAPI {
       message: { error: 'Muitas requisições' },
       standardHeaders: true,
       legacyHeaders: false,
-      trustProxy: true
+      // Removido trustProxy pois já está configurado no app.set
+      skip: (req) => {
+        // Pular rate limiting para health check
+        return req.path === '/health';
+      }
     });
 
     this.app.use('/api/', apiLimiter);
@@ -494,9 +498,12 @@ class WhatsAppCheckerAPI {
 
   async getUserInstances(req, res) {
     try {
+      console.log(`🔍 Buscando instâncias para usuário ${req.user.id} (${req.user.username})`);
       const instances = await this.whatsappManager.getUserInstances(req.user.id);
+      console.log(`📱 Encontradas ${instances.length} instâncias`);
       res.json(instances);
     } catch (error) {
+      console.error('❌ Erro ao buscar instâncias:', error);
       res.status(500).json({ error: error.message });
     }
   }

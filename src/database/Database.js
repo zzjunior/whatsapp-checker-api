@@ -194,6 +194,11 @@ class Database {
       console.log('✅ Conexão MySQL fechada');
     }
   }
+
+  // Alias para close
+  async disconnect() {
+    return this.close();
+  }
 }
 
 module.exports = Database;

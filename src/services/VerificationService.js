@@ -125,43 +125,78 @@ class VerificationService {
   }
 
   // Estatísticas
-  async getStats(tokenId = null) {
+  async getStats(userId = null) {
     try {
-      const where = tokenId ? 'WHERE token_id = ?' : '';
-      const params = tokenId ? [tokenId] : [];
+      // Definir condições baseadas no userId
+      const userCondition = userId ? 'WHERE vl.token_id IN (SELECT id FROM api_tokens WHERE user_id = ?)' : '';
+      const params = userId ? [userId] : [];
 
-      const [totalVerifications] = await this.db.query(
-        `SELECT COUNT(*) as total FROM verification_logs ${where}`,
+      // Total de verificações
+      const totalVerifications = await this.db.query(
+        `SELECT COUNT(*) as total FROM verification_logs vl ${userCondition}`,
         params
       );
 
-      const validWhere = tokenId ? 'WHERE token_id = ? AND result = \'valid\'' : 'WHERE result = \'valid\'';
-      const invalidWhere = tokenId ? 'WHERE token_id = ? AND result = \'invalid\'' : 'WHERE result = \'invalid\'';
-
-      const [validNumbers] = await this.db.query(
-        `SELECT COUNT(*) as total FROM verification_logs ${validWhere}`,
+      // Números válidos
+      const validNumbers = await this.db.query(
+        `SELECT COUNT(*) as total FROM verification_logs vl ${userCondition} ${userCondition ? 'AND' : 'WHERE'} vl.result = 'valid'`,
         params
       );
 
-      const [invalidNumbers] = await this.db.query(
-        `SELECT COUNT(*) as total FROM verification_logs ${invalidWhere}`,
+      // Números inválidos
+      const invalidNumbers = await this.db.query(
+        `SELECT COUNT(*) as total FROM verification_logs vl ${userCondition} ${userCondition ? 'AND' : 'WHERE'} vl.result = 'invalid'`,
         params
       );
 
-      const [cacheSize] = await this.db.query(
-        'SELECT COUNT(*) as total FROM verification_cache WHERE expires_at > NOW()'
+      // Verificações hoje
+      const todayVerifications = await this.db.query(
+        `SELECT COUNT(*) as total FROM verification_logs vl ${userCondition} ${userCondition ? 'AND' : 'WHERE'} DATE(vl.created_at) = CURDATE()`,
+        params
       );
+
+      // Cache não é específico por usuário, então contamos tudo
+      let cacheSize = 0;
+      try {
+        const cacheResult = await this.db.query(
+          'SELECT COUNT(*) as total FROM verification_cache WHERE expires_at > NOW()'
+        );
+        cacheSize = cacheResult[0]?.total || 0;
+      } catch (error) {
+        // Se a tabela não existir, cache size é 0
+        console.log('⚠️  Tabela verification_cache não existe');
+        cacheSize = 0;
+      }
+
+      // Instâncias ativas (só para admin ou específicas do usuário)
+      let activeInstances = 0;
+      try {
+        const instanceCondition = userId ? 'WHERE user_id = ? AND status = "connected"' : 'WHERE status = "connected"';
+        const instanceParams = userId ? [userId] : [];
+        
+        const instanceResult = await this.db.query(
+          `SELECT COUNT(*) as total FROM whatsapp_instances ${instanceCondition}`,
+          instanceParams
+        );
+        activeInstances = instanceResult[0]?.total || 0;
+      } catch (error) {
+        console.log('⚠️  Erro ao contar instâncias:', error.message);
+        activeInstances = 0;
+      }
 
       return {
-        total_verifications: totalVerifications.total,
-        valid_numbers: validNumbers.total,
-        invalid_numbers: invalidNumbers.total,
-        cache_size: cacheSize.total,
-        cache_hit_rate: totalVerifications.total > 0 
-          ? ((totalVerifications.total - (validNumbers.total + invalidNumbers.total)) / totalVerifications.total * 100).toFixed(2) 
+        total_verifications: totalVerifications[0]?.total || 0,
+        today_verifications: todayVerifications[0]?.total || 0,
+        valid_numbers: validNumbers[0]?.total || 0,
+        invalid_numbers: invalidNumbers[0]?.total || 0,
+        cache_size: cacheSize,
+        active_instances: activeInstances,
+        cache_hit_rate: totalVerifications[0]?.total > 0 
+          ? (((totalVerifications[0]?.total - (validNumbers[0]?.total + invalidNumbers[0]?.total)) / totalVerifications[0]?.total) * 100).toFixed(2) 
           : 0
       };
     } catch (error) {
+      console.error('❌ Erro ao obter estatísticas:', error);
       throw error;
     }
   }
